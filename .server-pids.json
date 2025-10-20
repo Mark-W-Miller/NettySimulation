@@ -1,0 +1,20 @@
+[
+  {
+    "name": "error-reporter",
+    "pid": 50597,
+    "command": [
+      "node",
+      "dev/error-reporter.mjs"
+    ],
+    "startedAt": "2025-10-20T19:18:07.313Z"
+  },
+  {
+    "name": "static-server",
+    "pid": 50599,
+    "command": [
+      "node",
+      "dev/static-server.mjs"
+    ],
+    "startedAt": "2025-10-20T19:18:07.315Z"
+  }
+]
