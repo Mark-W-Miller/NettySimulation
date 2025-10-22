@@ -286,14 +286,25 @@ export class App {
       if (this.dragMode === 'orbit') {
         const orbitSensitivity = 0.005;
         const elevationSensitivity = 0.004;
-        this.camera.azimuth = this.dragStart.azimuth + dx * orbitSensitivity;
+        this.camera.azimuth = this.dragStart.azimuth - dx * orbitSensitivity;
         const nextElevation = this.dragStart.elevation + dy * elevationSensitivity;
         const clampLimit = Math.PI / 2 - 0.05;
         this.camera.elevation = clamp(nextElevation, -clampLimit, clampLimit);
       } else if (this.dragMode === 'pan') {
-        const panSensitivity = 0.003 * this.camera.distance;
-        this.camera.panX = this.dragStart.panX - dx * panSensitivity;
-        this.camera.panY = this.dragStart.panY + dy * panSensitivity;
+        if (!this.canvas) {
+          return;
+        }
+
+        const panSensitivity = 0.0025;
+        const rotationMatrix = mat4RotationY(this.dragStart.azimuth);
+
+        const delta = vec3TransformMat4(
+          [dx * panSensitivity, -dy * panSensitivity, 0],
+          rotationMatrix,
+        );
+
+        this.camera.panX = this.dragStart.panX + delta[0];
+        this.camera.panY = this.dragStart.panY + delta[1];
       }
     };
 
@@ -770,4 +781,25 @@ function mat3FromMat4(mat: Float32Array): Float32Array {
     mat[4], mat[5], mat[6],
     mat[8], mat[9], mat[10],
   ]);
+}
+
+function mat4RotationY(angle: number): Float32Array {
+  const c = Math.cos(angle);
+  const s = Math.sin(angle);
+
+  return new Float32Array([
+    c, 0, -s, 0,
+    0, 1, 0, 0,
+    s, 0, c, 0,
+    0, 0, 0, 1,
+  ]);
+}
+
+function vec3TransformMat4(vec: [number, number, number], mat: Float32Array): [number, number, number] {
+  const [x, y, z] = vec;
+  return [
+    mat[0] * x + mat[4] * y + mat[8] * z + mat[12],
+    mat[1] * x + mat[5] * y + mat[9] * z + mat[13],
+    mat[2] * x + mat[6] * y + mat[10] * z + mat[14],
+  ];
 }
