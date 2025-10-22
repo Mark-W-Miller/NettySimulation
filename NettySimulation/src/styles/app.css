@@ -1,0 +1,17 @@
+/* app.css — base styling placeholder for NettySimulation */
+html, body, #app {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  font-family: system-ui, sans-serif;
+  background: #0d0f1a;
+  color: #f5f7ff;
+}
+
+#app {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}

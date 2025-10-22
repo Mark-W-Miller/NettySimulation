@@ -1,0 +1,70 @@
+Got it — here’s the updated, ready-to-paste Codex setup prompt tailored for your existing skeleton project named NettySimulation.
+This version explicitly gives Codex permission to reorganize, rename, or replace files as it sees fit in order to build a clean, maintainable architecture.
+
+⸻
+
+🧠 Prompt for Codex
+
+You are my technical architect and setup assistant for an existing TypeScript project named NettySimulation.
+The project already contains a basic Vite + TypeScript scaffold and a blank page that runs.
+You now have complete authority to refactor the file structure, add, move, or rename any files, and modify configuration files as needed to establish a robust architecture for the simulator.
+
+The goal is to create a modular workspace that cleanly separates:
+	•	the simulation engine (physics and field logic)
+	•	the rendering layer (2D/3D visuals)
+	•	the DSL scripting system (Netty command language)
+	•	the UI layer (HUD, timeline, inspector)
+
+Use the following target structure as your baseline, but feel free to adjust details for consistency or practicality:
+
+NettySimulation/
+├─ package.json
+├─ vite.config.ts
+├─ src/
+│  ├─ main.ts                    # app bootstrap; starts Engine + UI
+│  ├─ app/
+│  │   └─ App.ts                 # coordinates engine, simulation, UI
+│  ├─ engine/
+│  │   ├─ Engine.ts              # initializes renderer, scene, cameras
+│  │   ├─ Renderer3D.ts          # draws 3D/2D objects
+│  │   ├─ Renderer2DOverlay.ts   # overlays, heatmaps, HUD layers
+│  │   ├─ Time.ts                # global tick, playback speed, events
+│  │   └─ Assets.ts              # colors, materials, fonts
+│  ├─ sim/
+│  │   ├─ World.ts               # registry of all simulation objects
+│  │   ├─ Grid.ts                # lattice; stores amplitude, phase, spin, etc.
+│  │   ├─ Objects.ts             # RGP, Ring, Disc, Particle classes
+│  │   ├─ Dynamics.ts            # waveOut, spinIn, orderBurst functions
+│  │   ├─ Coupling.ts            # neighbour coupling and diffusion rules
+│  │   ├─ Entanglement.ts        # phase links and correlations
+│  │   └─ Scripting.ts           # executes parsed DSL actions
+│  ├─ dsl/
+│  │   ├─ grammar.md             # human-readable command reference
+│  │   ├─ parser.ts              # converts .ncmd files → Action objects
+│  │   ├─ commands.ts            # MAKE, STYLE, MOVE, ANIM implementations
+│  │   ├─ timeline.ts            # keyframes, easing, scheduling
+│  │   └─ presets.ts             # color palettes, kernels, style presets
+│  ├─ ui/
+│  │   ├─ HUD.ts                 # play/pause, speed, timeline scrub
+│  │   └─ Inspector.ts           # live object inspector/debug overlay
+│  ├─ scenes/
+│  │   ├─ S01_FirstRing.ncmd     # DSL script: “First Ring, First Tilt”
+│  │   ├─ S02_LocalFormation.ncmd
+│  │   └─ S03_BlueCondense.ncmd
+│  ├─ styles/
+│  │   └─ app.css                # base styling
+│  └─ types/
+│      └─ core.d.ts              # shared interfaces and type definitions
+├─ test/
+│  ├─ sim.spec.ts                # tests for kernels, coupling, timing
+│  └─ dsl.spec.ts                # tests for parser + timeline
+└─ README.md
+
+Instructions
+	1.	You may create, rename, move, or delete files and folders as required to achieve a clean architecture.
+	2.	Add clear header comments in each file explaining its purpose.
+	3.	Initialize empty class or function placeholders if it helps document intent (e.g., export class Engine { /* ... */ }).
+	4.	Ensure the project still builds and runs with npm run dev showing a blank page and logging "NettySimulation ready".
+	5.	After the structure is in place, summarize any adjustments you made so I know how the project evolved.
+
+Goal: Establish a coherent, extensible base for the Netty simulation and visualization system, ready for iterative development.
