@@ -1,0 +1,15 @@
+# Node / Vite artifacts
+NettySimulation/node_modules/
+NettySimulation/dist/
+
+# Logs
+NettySimulation/.assistant.log
+NettySimulation/npm-debug.log*
+NettySimulation/yarn-debug.log*
+NettySimulation/yarn-error.log*
+NettySimulation/pnpm-debug.log*
+NettySimulation/.npm/_logs/
+
+# OS cruft
+.DS_Store
+Thumbs.db

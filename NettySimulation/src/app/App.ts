@@ -8,6 +8,7 @@ interface CameraState {
   distance: number;
   panX: number;
   panY: number;
+  panZ: number;
 }
 
 interface ShaderProgram {
@@ -53,6 +54,7 @@ export class App {
     distance: 4,
     panX: 0,
     panY: 0,
+    panZ: 0,
   };
 
   private dragMode: DragMode = null;
@@ -64,6 +66,7 @@ export class App {
     elevation: 0,
     panX: 0,
     panY: 0,
+    panZ: 0,
   };
 
   private resizeObserver: ResizeObserver | null = null;
@@ -178,7 +181,7 @@ export class App {
     gl.clearColor(0.03, 0.05, 0.09, 1);
     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 
-    const target: [number, number, number] = [this.camera.panX, this.camera.panY, 0];
+    const target: [number, number, number] = [this.camera.panX, this.camera.panY, this.camera.panZ];
     const position = sphericalToCartesian(this.camera.distance, this.camera.azimuth, this.camera.elevation, target);
     const clipRadius = 1.02;
     const cameraDistanceFromCenter = Math.hypot(position[0], position[1], position[2]);
@@ -269,6 +272,7 @@ export class App {
         elevation: this.camera.elevation,
         panX: this.camera.panX,
         panY: this.camera.panY,
+        panZ: this.camera.panZ,
       };
 
       container.classList.toggle('is-orbiting', mode === 'orbit');
@@ -291,20 +295,20 @@ export class App {
         const clampLimit = Math.PI / 2 - 0.05;
         this.camera.elevation = clamp(nextElevation, -clampLimit, clampLimit);
       } else if (this.dragMode === 'pan') {
-        if (!this.canvas) {
-          return;
-        }
+        const panSensitivity = 0.0018 * this.camera.distance;
+        const basis = getCameraPanBasis(this.dragStart.azimuth, this.dragStart.elevation);
 
-        const panSensitivity = 0.0025;
-        const rotationMatrix = mat4RotationY(this.dragStart.azimuth);
+        const deltaRight = dx * panSensitivity;
+        const deltaUp = dy * panSensitivity;
 
-        const delta = vec3TransformMat4(
-          [dx * panSensitivity, -dy * panSensitivity, 0],
-          rotationMatrix,
+        const worldDelta = addVec3(
+          scaleVec3(basis.right, deltaRight),
+          scaleVec3(basis.up, deltaUp),
         );
 
-        this.camera.panX = this.dragStart.panX + delta[0];
-        this.camera.panY = this.dragStart.panY + delta[1];
+        this.camera.panX = this.dragStart.panX + worldDelta[0];
+        this.camera.panY = this.dragStart.panY + worldDelta[1];
+        this.camera.panZ = this.dragStart.panZ + worldDelta[2];
       }
     };
 
@@ -320,7 +324,7 @@ export class App {
     const wheel = (event: WheelEvent) => {
       event.preventDefault();
       const zoomSensitivity = 0.0018;
-      const nextDistance = this.camera.distance - event.deltaY * zoomSensitivity;
+      const nextDistance = this.camera.distance + event.deltaY * zoomSensitivity;
       this.camera.distance = clamp(nextDistance, 0.15, 12);
     };
 
@@ -783,23 +787,40 @@ function mat3FromMat4(mat: Float32Array): Float32Array {
   ]);
 }
 
-function mat4RotationY(angle: number): Float32Array {
-  const c = Math.cos(angle);
-  const s = Math.sin(angle);
-
-  return new Float32Array([
-    c, 0, -s, 0,
-    0, 1, 0, 0,
-    s, 0, c, 0,
-    0, 0, 0, 1,
-  ]);
+function getCameraPanBasis(azimuth: number, elevation: number): { right: [number, number, number]; up: [number, number, number] } {
+  const cameraPos = sphericalToCartesian(1, azimuth, elevation, [0, 0, 0]);
+  const viewDir = normalizeTuple([-cameraPos[0], -cameraPos[1], -cameraPos[2]]);
+  let right = crossVec3([0, 1, 0], viewDir);
+  if (lengthVec3(right) < 1e-5) {
+    right = [1, 0, 0];
+  } else {
+    right = normalizeTuple(right);
+  }
+  const up = normalizeTuple(crossVec3(viewDir, right));
+  return { right, up };
 }
 
-function vec3TransformMat4(vec: [number, number, number], mat: Float32Array): [number, number, number] {
-  const [x, y, z] = vec;
+function normalizeTuple(vec: [number, number, number]): [number, number, number] {
+  const len = lengthVec3(vec) || 1;
+  return [vec[0] / len, vec[1] / len, vec[2] / len];
+}
+
+function crossVec3(a: [number, number, number], b: [number, number, number]): [number, number, number] {
   return [
-    mat[0] * x + mat[4] * y + mat[8] * z + mat[12],
-    mat[1] * x + mat[5] * y + mat[9] * z + mat[13],
-    mat[2] * x + mat[6] * y + mat[10] * z + mat[14],
+    a[1] * b[2] - a[2] * b[1],
+    a[2] * b[0] - a[0] * b[2],
+    a[0] * b[1] - a[1] * b[0],
   ];
+}
+
+function scaleVec3(vec: [number, number, number], scalar: number): [number, number, number] {
+  return [vec[0] * scalar, vec[1] * scalar, vec[2] * scalar];
+}
+
+function addVec3(a: [number, number, number], b: [number, number, number]): [number, number, number] {
+  return [a[0] + b[0], a[1] + b[1], a[2] + b[2]];
+}
+
+function lengthVec3(vec: [number, number, number]): number {
+  return Math.hypot(vec[0], vec[1], vec[2]);
 }
