@@ -22,6 +22,9 @@ interface ShaderProgram {
   uniformLightDirection: WebGLUniformLocation;
   uniformColor: WebGLUniformLocation;
   uniformUseVertexColor: WebGLUniformLocation;
+  uniformClipEnabled: WebGLUniformLocation;
+  uniformClipCenter: WebGLUniformLocation;
+  uniformClipRadius: WebGLUniformLocation;
 }
 
 interface IndexedMesh {
@@ -177,6 +180,9 @@ export class App {
 
     const target: [number, number, number] = [this.camera.panX, this.camera.panY, 0];
     const position = sphericalToCartesian(this.camera.distance, this.camera.azimuth, this.camera.elevation, target);
+    const clipRadius = 1.02;
+    const cameraDistanceFromCenter = Math.hypot(position[0], position[1], position[2]);
+    const clipEnabled = cameraDistanceFromCenter > clipRadius + 0.05;
 
     this.viewMatrix = mat4LookAt(position, target, [0, 1, 0]);
     this.normalMatrix = mat3FromMat4(this.modelMatrix);
@@ -203,9 +209,12 @@ export class App {
     gl.enableVertexAttribArray(program.attribColor);
 
     gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, this.sphere.indexBuffer);
-    gl.uniform1f(program.uniformUseVertexColor, 1.0);
+    gl.uniform1f(program.uniformUseVertexColor, 0.0);
     gl.uniform3fv(program.uniformColor, [0.28, 0.46, 0.9]);
+    gl.uniform1f(program.uniformClipEnabled, 0.0);
+    gl.disable(gl.CULL_FACE);
     gl.drawElements(gl.TRIANGLES, this.sphere.indexCount, gl.UNSIGNED_SHORT, 0);
+    gl.enable(gl.CULL_FACE);
 
     // Draw axes
     gl.bindBuffer(gl.ARRAY_BUFFER, this.axes.positionBuffer);
@@ -225,6 +234,9 @@ export class App {
     gl.enable(gl.POLYGON_OFFSET_FILL);
     gl.polygonOffset(1.0, 1.0);
     gl.uniform1f(program.uniformUseVertexColor, 1.0);
+    gl.uniform1f(program.uniformClipEnabled, clipEnabled ? 1.0 : 0.0);
+    gl.uniform3f(program.uniformClipCenter, 0.0, 0.0, 0.0);
+    gl.uniform1f(program.uniformClipRadius, clipRadius);
     gl.drawElements(gl.TRIANGLES, this.axes.indexCount, gl.UNSIGNED_SHORT, 0);
     gl.disable(gl.POLYGON_OFFSET_FILL);
     gl.enable(gl.CULL_FACE);
@@ -298,7 +310,7 @@ export class App {
       event.preventDefault();
       const zoomSensitivity = 0.0018;
       const nextDistance = this.camera.distance - event.deltaY * zoomSensitivity;
-      this.camera.distance = clamp(nextDistance, 1.2, 12);
+      this.camera.distance = clamp(nextDistance, 0.15, 12);
     };
 
     const contextMenu = (event: MouseEvent) => {
@@ -358,11 +370,20 @@ export class App {
       varying vec3 vColor;
 
       uniform vec3 uLightDirection;
+      uniform float uClipEnabled;
+      uniform vec3 uClipCenter;
+      uniform float uClipRadius;
 
       void main() {
         vec3 normal = normalize(vNormal);
         float diffuse = max(dot(normal, normalize(uLightDirection)), 0.0);
         float ambient = 0.25;
+        if (uClipEnabled > 0.5) {
+          float distanceToCenter = distance(vWorldPosition, uClipCenter);
+          if (distanceToCenter < uClipRadius) {
+            discard;
+          }
+        }
         vec3 shaded = vColor * (ambient + (1.0 - ambient) * diffuse);
         gl_FragColor = vec4(shaded, 1.0);
       }
@@ -402,6 +423,9 @@ export class App {
     const uniformLightDirection = getRequiredUniform(gl, program, 'uLightDirection');
     const uniformColor = getRequiredUniform(gl, program, 'uColor');
     const uniformUseVertexColor = getRequiredUniform(gl, program, 'uUseVertexColor');
+    const uniformClipEnabled = getRequiredUniform(gl, program, 'uClipEnabled');
+    const uniformClipCenter = getRequiredUniform(gl, program, 'uClipCenter');
+    const uniformClipRadius = getRequiredUniform(gl, program, 'uClipRadius');
 
     return {
       program,
@@ -415,6 +439,9 @@ export class App {
       uniformLightDirection,
       uniformColor,
       uniformUseVertexColor,
+      uniformClipEnabled,
+      uniformClipCenter,
+      uniformClipRadius,
     };
   }
 
