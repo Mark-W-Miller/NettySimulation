@@ -3,6 +3,7 @@ import './styles/app.css';
 import { App } from './app/App';
 import { TabPanel } from './ui/TabPanel';
 import { createDisplayTab } from './ui/display';
+import { createSimTab } from './ui/sim';
 
 const rootElement = document.getElementById('app');
 
@@ -25,6 +26,12 @@ panel.addTab({
   label: 'Display',
   render: () => createDisplayTab(app),
   isDefault: true,
+});
+
+panel.addTab({
+  id: 'sim',
+  label: 'Sim',
+  render: () => createSimTab(app),
 });
 
 shell.appendChild(panel.element);

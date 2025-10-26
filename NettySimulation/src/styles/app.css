@@ -171,3 +171,78 @@ body {
   accent-color: #5d8dff;
   cursor: pointer;
 }
+
+.sim-tab {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.sim-controls {
+  display: flex;
+  gap: 0.75rem;
+}
+
+.sim-button {
+  appearance: none;
+  border: none;
+  background: linear-gradient(135deg, rgba(94, 134, 255, 0.85), rgba(58, 96, 195, 0.85));
+  color: #050b1f;
+  font-weight: 600;
+  padding: 0.5rem 1.1rem;
+  border-radius: 0.75rem;
+  cursor: pointer;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.sim-button:disabled {
+  background: rgba(34, 46, 92, 0.55);
+  color: rgba(240, 244, 255, 0.55);
+  cursor: default;
+  box-shadow: none;
+  transform: none;
+}
+
+.sim-button:not(:disabled):hover {
+  transform: translateY(-1px);
+  box-shadow: 0 8px 18px rgba(40, 74, 154, 0.45);
+}
+
+.sim-speed-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.sim-speed-label {
+  font-size: 0.85rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+
+.sim-speed-slider {
+  width: 100%;
+}
+
+.sim-speed-value {
+  font-size: 0.85rem;
+  color: rgba(214, 225, 255, 0.85);
+}
+
+.sim-objects-label {
+  font-size: 0.8rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: rgba(200, 214, 255, 0.7);
+}
+
+.sim-objects-list {
+  margin: 0;
+  padding-left: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.9rem;
+  color: rgba(226, 233, 255, 0.9);
+}
