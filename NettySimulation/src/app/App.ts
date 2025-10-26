@@ -191,10 +191,6 @@ export class App {
     const gl = this.gl;
     const program = this.program;
 
-    if (beats > 0 && this.sphereObject) {
-      this.sphereObject.rotationY += beats * this.rotationPerBeat;
-    }
-
     // Ensure fragments respect depth buffering (z-order).
     gl.enable(gl.DEPTH_TEST);
     // Skip drawing faces that point away from the camera.

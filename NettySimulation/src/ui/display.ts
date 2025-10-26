@@ -4,7 +4,7 @@ import { App } from '../app/App';
 type AxisKey = 'x' | 'y' | 'z';
 
 const AXIS_LABELS: Record<AxisKey, string> = {
-  x: 'Show X Axis (R)',
+  x: 'Show X Axis (G)',
   y: 'Show Y Axis (Y)',
   z: 'Show Z Axis (B)',
 };
