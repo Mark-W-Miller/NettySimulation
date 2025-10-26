@@ -578,16 +578,23 @@ export class App {
         vec3 spinAxis = normalize(uPlaneVector);
         vec3 surfaceDirection = normalize(vWorldPosition);
 
-        // Polar alignment describes how far a surface point is from the spin plane (equator).
-        float alignment = dot(surfaceDirection, spinAxis);
-        float equatorProximity = clamp(1.0 - abs(alignment), 0.0, 1.0);
+        // Alignment with the spin axis: 0 at the equator, 1 at either pole. We shade symmetrically.
+        float alignment = abs(dot(surfaceDirection, spinAxis));
 
-        // Low intensity yields a thin equatorial ring; high intensity flattens into a uniformly lit hemisphere.
+        // Ease the coverage so that poles brighten slowly and transitions stay smooth while dragging the slider.
         float intensity = clamp(uShadingIntensity, 0.0, 1.0);
-        float falloffPower = mix(6.0, 0.5, intensity);
-        float ringProfile = pow(max(equatorProximity, 0.0001), falloffPower);
-        float hemisphereFloor = intensity;
-        float brightness = max(hemisphereFloor, ringProfile);
+        float coverage = pow(intensity, 1.4);
+        float coverageEdge = clamp(coverage, 0.0, 1.0);
+        float softness = mix(0.04, 0.22, intensity);
+        float edgeMax = min(coverageEdge + softness, 1.0);
+
+        // Smoothly light a band that widens from the equator towards the poles as intensity increases.
+        float band = 1.0 - smoothstep(coverageEdge, edgeMax, alignment);
+
+        // Narrow bands should pop with more brightness while broader hemispheres stay softer.
+        float brightnessBoost = mix(2.6, 0.45, intensity);
+        float brightness = band * pow(intensity, 0.55) * brightnessBoost;
+        brightness = clamp(brightness, 0.0, 1.0);
 
         vec3 shaded = baseColor * brightness;
         gl_FragColor = vec4(clamp(shaded, 0.0, 1.0), 1.0);
