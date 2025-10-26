@@ -1,5 +1,11 @@
 // App.ts — renders a matte sphere with custom WebGL orbit controls (no external deps)
-import { Assets, type AxisMesh, type AxisSet, type SphereMesh } from '../engine/Assets';
+import {
+  Assets,
+  type AxisMesh,
+  type AxisSet,
+  type SphereMesh,
+  type SphereProgram,
+} from '../engine/Assets';
 import { CameraController } from './camera';
 import {
   clamp,
@@ -14,25 +20,6 @@ import {
   normalizeVec3,
 } from './math3d';
 
-interface ShaderProgram {
-  program: WebGLProgram;
-  attribPosition: number;
-  attribNormal: number;
-  attribColor: number;
-  uniformModel: WebGLUniformLocation;
-  uniformView: WebGLUniformLocation;
-  uniformProjection: WebGLUniformLocation;
-  uniformNormalMatrix: WebGLUniformLocation;
-  uniformLightDirection: WebGLUniformLocation;
-  uniformColor: WebGLUniformLocation;
-  uniformUseVertexColor: WebGLUniformLocation;
-  uniformClipEnabled: WebGLUniformLocation;
-  uniformClipCenter: WebGLUniformLocation;
-  uniformClipRadius: WebGLUniformLocation;
-  uniformShadingIntensity: WebGLUniformLocation;
-  uniformPlaneVector: WebGLUniformLocation;
-}
-
 interface SimObject {
   id: string;
   mesh: SphereMesh;
@@ -45,7 +32,7 @@ interface SimObject {
 export class App {
   private canvas: HTMLCanvasElement | null = null;
   private gl: WebGLRenderingContext | null = null;
-  private program: ShaderProgram | null = null;
+  private program: SphereProgram | null = null;
   private sphere: SphereMesh | null = null;
   private axes: AxisSet | null = null;
   private axisVisibility: Record<'x' | 'y' | 'z', boolean> = { x: true, y: true, z: true };
@@ -88,7 +75,7 @@ export class App {
       throw new Error('WebGL not supported in this browser.');
     }
 
-    const program = this.createProgram(gl);
+    const program = Assets.createSphereProgram(gl);
     const sphere = Assets.createSphereMesh(gl, this.sphereSegments.lat, this.sphereSegments.lon);
     const axes = Assets.createAxisSet(gl);
 
@@ -152,8 +139,8 @@ export class App {
       Assets.disposeAxisSet(this.gl, this.axes);
     }
 
-    if (this.gl && this.program) {
-      this.gl.deleteProgram(this.program.program);
+    if (this.gl) {
+      Assets.disposeSphereProgram(this.gl, this.program);
     }
 
     this.canvas = null;
@@ -214,13 +201,12 @@ export class App {
     this.viewMatrix = mat4LookAt(position, target, [0, 1, 0]);
 
     // Activate the shader program for subsequent draw calls.
-    gl.useProgram(program.program);
-
-    // Upload camera view and projection matrices shared by all objects.
-    gl.uniformMatrix4fv(program.uniformView, false, this.viewMatrix);
-    gl.uniformMatrix4fv(program.uniformProjection, false, this.projectionMatrix);
-    // Set the light direction.
-    gl.uniform3fv(program.uniformLightDirection, normalizeVec3([0.5, 0.8, 0.4]));
+    Assets.useSphereProgram(gl, program);
+    Assets.setSphereSharedUniforms(gl, program, {
+      viewMatrix: this.viewMatrix,
+      projectionMatrix: this.projectionMatrix,
+      lightDirection: normalizeVec3([0.5, 0.8, 0.4]),
+    });
 
     for (const simObject of this.simObjects) {
       if (beats > 0) {
@@ -228,46 +214,12 @@ export class App {
       }
 
       const { modelMatrix, normalMatrix } = this.computeModelMatrices(simObject);
-      gl.uniformMatrix4fv(program.uniformModel, false, modelMatrix);
-      gl.uniformMatrix3fv(program.uniformNormalMatrix, false, normalMatrix);
-      gl.uniform1f(program.uniformShadingIntensity, this.shadingIntensity);
-      gl.uniform3fv(program.uniformPlaneVector, this.getPlaneNormal(simObject.plane));
-
-      const mesh = simObject.mesh;
-
-      // Bind the sphere's position VBO to the ARRAY_BUFFER target so subsequent attribute calls read its vertex data.
-      gl.bindBuffer(gl.ARRAY_BUFFER, mesh.positionBuffer);
-      // Describe position layout.
-      gl.vertexAttribPointer(program.attribPosition, 3, gl.FLOAT, false, 0, 0);
-      // Enable the position attribute.
-      gl.enableVertexAttribArray(program.attribPosition);
-
-      // Bind per-vertex normals.
-      gl.bindBuffer(gl.ARRAY_BUFFER, mesh.normalBuffer);
-      // Describe normal layout.
-      gl.vertexAttribPointer(program.attribNormal, 3, gl.FLOAT, false, 0, 0);
-      // Enable the normal attribute.
-      gl.enableVertexAttribArray(program.attribNormal);
-
-      // Bind the baked vertex colors.
-      gl.bindBuffer(gl.ARRAY_BUFFER, mesh.colorBuffer);
-      // Describe color layout.
-      gl.vertexAttribPointer(program.attribColor, 3, gl.FLOAT, false, 0, 0);
-      // Enable the color attribute.
-      gl.enableVertexAttribArray(program.attribColor);
-
-      // Bind triangle indices.
-      gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, mesh.indexBuffer);
-      // Tell the shader to use per-vertex colors supplied in the VBO.
-      gl.uniform1f(program.uniformUseVertexColor, 1.0);
-      // Disable clipping for solid objects.
-      gl.uniform1f(program.uniformClipEnabled, 0.0);
-      // Render both sides to see the interior when zoomed in.
-      gl.disable(gl.CULL_FACE);
-      // Draw the mesh.
-      gl.drawElements(gl.TRIANGLES, mesh.indexCount, gl.UNSIGNED_SHORT, 0);
-      // Restore face culling for subsequent draws.
-      gl.enable(gl.CULL_FACE);
+      Assets.drawSphere(gl, program, simObject.mesh, {
+        modelMatrix,
+        normalMatrix,
+        shadingIntensity: this.shadingIntensity,
+        planeVector: this.getPlaneNormal(simObject.plane),
+      });
     }
 
     // Draw axes
@@ -514,177 +466,4 @@ export class App {
     this.notifySimChange();
   }
 
-  private createProgram(gl: WebGLRenderingContext): ShaderProgram {
-    const vertexShaderSource = `
-      attribute vec3 aPosition;
-      attribute vec3 aNormal;
-      attribute vec3 aColor;
-
-      uniform mat4 uModelMatrix;
-      uniform mat4 uViewMatrix;
-      uniform mat4 uProjectionMatrix;
-      uniform mat3 uNormalMatrix;
-      uniform float uUseVertexColor;
-      uniform vec3 uColor;
-
-      varying vec3 vNormal;
-      varying vec3 vWorldPosition;
-      varying vec3 vColor;
-
-      void main() {
-        vec4 worldPosition = uModelMatrix * vec4(aPosition, 1.0);
-        vWorldPosition = worldPosition.xyz;
-        vNormal = normalize(uNormalMatrix * aNormal);
-        vColor = mix(uColor, aColor, uUseVertexColor);
-        gl_Position = uProjectionMatrix * uViewMatrix * worldPosition;
-      }
-    `;
-
-    const fragmentShaderSource = `
-      precision mediump float;
-
-      varying vec3 vNormal;
-      varying vec3 vWorldPosition;
-      varying vec3 vColor;
-
-      uniform vec3 uLightDirection;
-      uniform float uClipEnabled;
-      uniform vec3 uClipCenter;
-      uniform float uClipRadius;
-      uniform float uShadingIntensity;
-      uniform vec3 uPlaneVector;
-
-      void main() {
-        vec3 normal = normalize(vNormal);
-        float diffuse = max(dot(normal, normalize(uLightDirection)), 0.0);
-        float ambient = 0.25;
-
-        if (uClipEnabled > 0.5) {
-          float distanceToCenter = distance(vWorldPosition, uClipCenter);
-          if (distanceToCenter < uClipRadius) {
-            discard;
-          }
-        }
-
-        vec3 baseColor = vColor * (ambient + (1.0 - ambient) * diffuse);
-
-        // Treat the spin axis as the shading reference; if it is degenerate, fall back to base lighting.
-        float axisLength = length(uPlaneVector);
-        if (axisLength < 0.0001) {
-          gl_FragColor = vec4(baseColor, 1.0);
-          return;
-        }
-
-        vec3 spinAxis = normalize(uPlaneVector);
-        vec3 surfaceDirection = normalize(vWorldPosition);
-
-        // Alignment with the spin axis: 0 at the equator, 1 at either pole. We shade symmetrically.
-        float alignment = abs(dot(surfaceDirection, spinAxis));
-
-        // Ease the coverage so that poles brighten slowly and transitions stay smooth while dragging the slider.
-        float intensity = clamp(uShadingIntensity, 0.0, 1.0);
-        float coverage = pow(intensity, 1.4);
-        float coverageEdge = clamp(coverage, 0.0, 1.0);
-        float softness = mix(0.04, 0.22, intensity);
-        float edgeMax = min(coverageEdge + softness, 1.0);
-
-        // Smoothly light a band that widens from the equator towards the poles as intensity increases.
-        float band = 1.0 - smoothstep(coverageEdge, edgeMax, alignment);
-
-        // Narrow bands should pop with more brightness while broader hemispheres stay softer.
-        float brightnessBoost = mix(2.6, 0.45, intensity);
-        float brightness = band * pow(intensity, 0.55) * brightnessBoost;
-        brightness = clamp(brightness, 0.0, 1.0);
-
-        vec3 shaded = baseColor * brightness;
-        gl_FragColor = vec4(clamp(shaded, 0.0, 1.0), 1.0);
-      }
-    `;
-
-    const vertexShader = compileShader(gl, gl.VERTEX_SHADER, vertexShaderSource);
-    const fragmentShader = compileShader(gl, gl.FRAGMENT_SHADER, fragmentShaderSource);
-
-    const program = gl.createProgram();
-    if (!program) {
-      throw new Error('Failed to create WebGL program.');
-    }
-
-    gl.attachShader(program, vertexShader);
-    gl.attachShader(program, fragmentShader);
-    gl.linkProgram(program);
-
-    if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
-      const info = gl.getProgramInfoLog(program);
-      gl.deleteProgram(program);
-      gl.deleteShader(vertexShader);
-      gl.deleteShader(fragmentShader);
-      throw new Error(`Failed to link WebGL program: ${info ?? 'unknown error'}`);
-    }
-
-    gl.deleteShader(vertexShader);
-    gl.deleteShader(fragmentShader);
-
-    const attribPosition = gl.getAttribLocation(program, 'aPosition');
-    const attribNormal = gl.getAttribLocation(program, 'aNormal');
-    const attribColor = gl.getAttribLocation(program, 'aColor');
-
-    const uniformModel = getRequiredUniform(gl, program, 'uModelMatrix');
-    const uniformView = getRequiredUniform(gl, program, 'uViewMatrix');
-    const uniformProjection = getRequiredUniform(gl, program, 'uProjectionMatrix');
-    const uniformNormalMatrix = getRequiredUniform(gl, program, 'uNormalMatrix');
-    const uniformLightDirection = getRequiredUniform(gl, program, 'uLightDirection');
-    const uniformColor = getRequiredUniform(gl, program, 'uColor');
-    const uniformUseVertexColor = getRequiredUniform(gl, program, 'uUseVertexColor');
-    const uniformClipEnabled = getRequiredUniform(gl, program, 'uClipEnabled');
-    const uniformClipCenter = getRequiredUniform(gl, program, 'uClipCenter');
-    const uniformClipRadius = getRequiredUniform(gl, program, 'uClipRadius');
-    const uniformShadingIntensity = getRequiredUniform(gl, program, 'uShadingIntensity');
-    const uniformPlaneVector = getRequiredUniform(gl, program, 'uPlaneVector');
-
-    return {
-      program,
-      attribPosition,
-      attribNormal,
-      attribColor,
-      uniformModel,
-      uniformView,
-      uniformProjection,
-      uniformNormalMatrix,
-      uniformLightDirection,
-      uniformColor,
-      uniformUseVertexColor,
-      uniformClipEnabled,
-      uniformClipCenter,
-      uniformClipRadius,
-      uniformShadingIntensity,
-      uniformPlaneVector,
-    };
-  }
-
-}
-
-function compileShader(gl: WebGLRenderingContext, type: number, source: string): WebGLShader {
-  const shader = gl.createShader(type);
-  if (!shader) {
-    throw new Error('Failed to create WebGL shader.');
-  }
-
-  gl.shaderSource(shader, source);
-  gl.compileShader(shader);
-
-  if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
-    const info = gl.getShaderInfoLog(shader);
-    gl.deleteShader(shader);
-    throw new Error(`Shader compile failure: ${info ?? 'unknown error'}`);
-  }
-
-  return shader;
-}
-
-function getRequiredUniform(gl: WebGLRenderingContext, program: WebGLProgram, name: string): WebGLUniformLocation {
-  const location = gl.getUniformLocation(program, name);
-  if (!location) {
-    throw new Error(`Uniform ${name} is missing.`);
-  }
-  return location;
 }
