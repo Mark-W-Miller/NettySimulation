@@ -4,6 +4,7 @@ import { App } from './app/App';
 import { TabPanel } from './ui/TabPanel';
 import { createDisplayTab } from './ui/display';
 import { createSimTab } from './ui/sim';
+import { createPropertiesTab } from './ui/properties';
 
 const rootElement = document.getElementById('app');
 
@@ -31,7 +32,13 @@ panel.addTab({
 panel.addTab({
   id: 'sim',
   label: 'Sim',
-  render: () => createSimTab(app),
+  render: () => createSimTab(app, () => panel.setActiveTab('properties')),
+});
+
+panel.addTab({
+  id: 'properties',
+  label: 'Properties',
+  render: () => createPropertiesTab(app),
 });
 
 shell.appendChild(panel.element);

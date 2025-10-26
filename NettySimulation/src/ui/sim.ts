@@ -1,7 +1,7 @@
 // sim.ts — builds the Simulation tab UI for starting/stopping and tuning speed
 import { App } from '../app/App';
 
-export function createSimTab(app: App): HTMLElement {
+export function createSimTab(app: App, openPropertiesTab: () => void): HTMLElement {
   const container = document.createElement('div');
   container.className = 'sim-tab';
 
@@ -61,14 +61,26 @@ export function createSimTab(app: App): HTMLElement {
     const running = app.isSimulationRunning();
     startButton.disabled = running;
     stopButton.disabled = !running;
-    speedValue.textContent = `${app.getSimulationSpeed()} beats/sec`;
+    const speed = app.getSimulationSpeed();
+    speedValue.textContent = `${speed} beats/sec`;
+    if (String(speed) !== slider.value) {
+      slider.value = String(speed);
+    }
   };
 
   const refreshObjectList = () => {
     objectList.innerHTML = '';
+    const selectedId = app.getSelectedSimObject()?.id ?? null;
     for (const simObject of app.getSimObjects()) {
       const item = document.createElement('li');
       item.textContent = simObject.id;
+      if (simObject.id === selectedId) {
+        item.classList.add('is-selected');
+      }
+      item.addEventListener('click', () => {
+        app.selectSimObject(simObject.id);
+        openPropertiesTab();
+      });
       objectList.appendChild(item);
     }
   };
@@ -89,11 +101,16 @@ export function createSimTab(app: App): HTMLElement {
     updateUI();
   });
 
+  const unsubscribe = app.onSimChange(() => {
+    updateUI();
+    refreshObjectList();
+  });
+
   updateUI();
   refreshObjectList();
-  requestAnimationFrame(() => {
-    refreshObjectList();
-    updateUI();
+
+  container.addEventListener('DOMNodeRemoved', () => {
+    unsubscribe();
   });
 
   return container;

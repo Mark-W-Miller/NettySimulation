@@ -245,4 +245,86 @@ body {
   gap: 0.25rem;
   font-size: 0.9rem;
   color: rgba(226, 233, 255, 0.9);
+  list-style: disc;
+}
+
+.sim-objects-list li {
+  cursor: pointer;
+  transition: color 0.2s ease;
+}
+
+.sim-objects-list li:hover {
+  color: #8fb6ff;
+}
+
+.sim-objects-list li.is-selected {
+  font-weight: 600;
+  color: #a4c6ff;
+}
+
+.properties-tab {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.properties-header {
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.properties-status {
+  font-size: 0.85rem;
+  color: rgba(214, 225, 255, 0.8);
+}
+
+.properties-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.properties-label {
+  font-size: 0.85rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+
+.properties-number {
+  width: 100%;
+  padding: 0.35rem 0.5rem;
+  border-radius: 0.5rem;
+  border: 1px solid rgba(90, 120, 200, 0.35);
+  background: rgba(18, 24, 44, 0.65);
+  color: #e6ecff;
+}
+
+.properties-fieldset {
+  border: 1px solid rgba(90, 120, 200, 0.25);
+  border-radius: 0.75rem;
+  padding: 0.6rem 0.8rem;
+  display: flex;
+  gap: 0.6rem;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.properties-fieldset legend {
+  font-size: 0.8rem;
+  font-weight: 600;
+  padding: 0 0.4rem;
+}
+
+.properties-radio {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  cursor: pointer;
+  user-select: none;
+  font-size: 0.85rem;
+}
+
+.properties-radio input[type="radio"] {
+  accent-color: #5d8dff;
+  cursor: pointer;
 }

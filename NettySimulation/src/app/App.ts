@@ -5,7 +5,9 @@ import {
   clamp,
   mat3FromMat4,
   mat3Identity,
+  mat4FromXRotation,
   mat4FromYRotation,
+  mat4FromZRotation,
   mat4Identity,
   mat4LookAt,
   mat4Perspective,
@@ -33,6 +35,9 @@ interface SimObject {
   id: string;
   mesh: SphereMesh;
   rotationY: number;
+  speedPerTick: number;
+  direction: 1 | -1;
+  plane: 'YG' | 'GB';
 }
 
 export class App {
@@ -59,6 +64,8 @@ export class App {
   private readonly rotationPerBeat = Math.PI / 90;
   private readonly simObjects: SimObject[] = [];
   private sphereObject: SimObject | null = null;
+  private selectedObjectId: string | null = null;
+  private readonly simListeners = new Set<() => void>();
 
   mount(host: HTMLElement): void {
     this.dispose();
@@ -87,8 +94,17 @@ export class App {
     this.sphere = sphere;
     this.axes = axes;
 
-    this.sphereObject = { id: 'sphere', mesh: sphere, rotationY: 0 };
+    this.sphereObject = {
+      id: 'sphere',
+      mesh: sphere,
+      rotationY: 0,
+      speedPerTick: 1,
+      direction: 1,
+      plane: 'YG',
+    };
     this.simObjects.push(this.sphereObject);
+    this.selectedObjectId = this.sphereObject.id;
+    this.notifySimChange();
 
     this.resize(canvas, gl);
     this.resizeObserver = new ResizeObserver(() => {
@@ -144,6 +160,8 @@ export class App {
     this.simObjects.length = 0;
     this.sphereObject = null;
     this.simRunning = false;
+    this.selectedObjectId = null;
+    this.notifySimChange();
   }
 
   private resize(canvas: HTMLCanvasElement, gl: WebGLRenderingContext): void {
@@ -203,48 +221,51 @@ export class App {
     // Set the light direction.
     gl.uniform3fv(program.uniformLightDirection, normalizeVec3([0.5, 0.8, 0.4]));
 
-    const sphereRotation = this.sphereObject?.rotationY ?? 0;
-    const sphereModelMatrix = mat4FromYRotation(sphereRotation);
-    const sphereNormalMatrix = mat3FromMat4(sphereModelMatrix);
+    for (const simObject of this.simObjects) {
+      if (beats > 0) {
+        simObject.rotationY += beats * this.rotationPerBeat * simObject.speedPerTick * simObject.direction;
+      }
 
-    // Upload sphere transforms.
-    gl.uniformMatrix4fv(program.uniformModel, false, sphereModelMatrix);
-    gl.uniformMatrix3fv(program.uniformNormalMatrix, false, sphereNormalMatrix);
+      const { modelMatrix, normalMatrix } = this.computeModelMatrices(simObject);
+      gl.uniformMatrix4fv(program.uniformModel, false, modelMatrix);
+      gl.uniformMatrix3fv(program.uniformNormalMatrix, false, normalMatrix);
 
-    // Draw sphere
-    // Bind the sphere's position VBO to the ARRAY_BUFFER target so subsequent attribute calls read its vertex data.
-    gl.bindBuffer(gl.ARRAY_BUFFER, this.sphere.positionBuffer);
-    // Describe position layout.
-    gl.vertexAttribPointer(program.attribPosition, 3, gl.FLOAT, false, 0, 0);
-    // Enable the position attribute.
-    gl.enableVertexAttribArray(program.attribPosition);
+      const mesh = simObject.mesh;
 
-    // Bind per-vertex normals.
-    gl.bindBuffer(gl.ARRAY_BUFFER, this.sphere.normalBuffer);
-    // Describe normal layout.
-    gl.vertexAttribPointer(program.attribNormal, 3, gl.FLOAT, false, 0, 0);
-    // Enable the normal attribute.
-    gl.enableVertexAttribArray(program.attribNormal);
+      // Bind the sphere's position VBO to the ARRAY_BUFFER target so subsequent attribute calls read its vertex data.
+      gl.bindBuffer(gl.ARRAY_BUFFER, mesh.positionBuffer);
+      // Describe position layout.
+      gl.vertexAttribPointer(program.attribPosition, 3, gl.FLOAT, false, 0, 0);
+      // Enable the position attribute.
+      gl.enableVertexAttribArray(program.attribPosition);
 
-    // Bind the baked vertex colors.
-    gl.bindBuffer(gl.ARRAY_BUFFER, this.sphere.colorBuffer);
-    // Describe color layout.
-    gl.vertexAttribPointer(program.attribColor, 3, gl.FLOAT, false, 0, 0);
-    // Enable the color attribute.
-    gl.enableVertexAttribArray(program.attribColor);
+      // Bind per-vertex normals.
+      gl.bindBuffer(gl.ARRAY_BUFFER, mesh.normalBuffer);
+      // Describe normal layout.
+      gl.vertexAttribPointer(program.attribNormal, 3, gl.FLOAT, false, 0, 0);
+      // Enable the normal attribute.
+      gl.enableVertexAttribArray(program.attribNormal);
 
-    // Bind triangle indices.
-    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, this.sphere.indexBuffer);
-    // Tell the shader to use per-vertex colors supplied in the VBO.
-    gl.uniform1f(program.uniformUseVertexColor, 1.0);
-    // Disable clipping for the sphere itself.
-    gl.uniform1f(program.uniformClipEnabled, 0.0);
-    // Render both sides to see the interior when zoomed in.
-    gl.disable(gl.CULL_FACE);
-    // Draw the sphere.
-    gl.drawElements(gl.TRIANGLES, this.sphere.indexCount, gl.UNSIGNED_SHORT, 0);
-    // Restore face culling for subsequent draws.
-    gl.enable(gl.CULL_FACE);
+      // Bind the baked vertex colors.
+      gl.bindBuffer(gl.ARRAY_BUFFER, mesh.colorBuffer);
+      // Describe color layout.
+      gl.vertexAttribPointer(program.attribColor, 3, gl.FLOAT, false, 0, 0);
+      // Enable the color attribute.
+      gl.enableVertexAttribArray(program.attribColor);
+
+      // Bind triangle indices.
+      gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, mesh.indexBuffer);
+      // Tell the shader to use per-vertex colors supplied in the VBO.
+      gl.uniform1f(program.uniformUseVertexColor, 1.0);
+      // Disable clipping for solid objects.
+      gl.uniform1f(program.uniformClipEnabled, 0.0);
+      // Render both sides to see the interior when zoomed in.
+      gl.disable(gl.CULL_FACE);
+      // Draw the mesh.
+      gl.drawElements(gl.TRIANGLES, mesh.indexCount, gl.UNSIGNED_SHORT, 0);
+      // Restore face culling for subsequent draws.
+      gl.enable(gl.CULL_FACE);
+    }
 
     // Draw axes
     if (shouldRenderAxes && this.axes) {
@@ -302,11 +323,15 @@ export class App {
     if (!this.simRunning) {
       this.simRunning = true;
       this.lastRenderTime = performance.now();
+      this.notifySimChange();
     }
   }
 
   stopSimulation(): void {
-    this.simRunning = false;
+    if (this.simRunning) {
+      this.simRunning = false;
+      this.notifySimChange();
+    }
   }
 
   isSimulationRunning(): boolean {
@@ -314,7 +339,11 @@ export class App {
   }
 
   setSimulationSpeed(speed: number): void {
-    this.simSpeed = clamp(speed, 1, 60);
+    const clamped = clamp(speed, 1, 60);
+    if (clamped !== this.simSpeed) {
+      this.simSpeed = clamped;
+      this.notifySimChange();
+    }
   }
 
   getSimulationSpeed(): number {
@@ -322,7 +351,76 @@ export class App {
   }
 
   getSimObjects(): ReadonlyArray<SimObject> {
-    return this.simObjects;
+    return [...this.simObjects];
+  }
+
+  onSimChange(listener: () => void): () => void {
+    this.simListeners.add(listener);
+    return () => {
+      this.simListeners.delete(listener);
+    };
+  }
+
+  selectSimObject(id: string | null): void {
+    if (this.selectedObjectId === id) {
+      return;
+    }
+    this.selectedObjectId = id;
+    this.notifySimChange();
+  }
+
+  getSelectedSimObject(): SimObject | null {
+    if (!this.selectedObjectId) {
+      return null;
+    }
+    return this.simObjects.find((object) => object.id === this.selectedObjectId) ?? null;
+  }
+
+  updateSelectedSimObject(update: Partial<Pick<SimObject, 'speedPerTick' | 'direction' | 'plane'>>): void {
+    const selected = this.getSelectedSimObject();
+    if (!selected) {
+      return;
+    }
+
+    if (typeof update.speedPerTick === 'number' && Number.isFinite(update.speedPerTick)) {
+      selected.speedPerTick = Math.max(0.1, update.speedPerTick);
+    }
+
+    if (update.direction) {
+      selected.direction = update.direction >= 0 ? 1 : -1;
+    }
+
+    if (update.plane) {
+      selected.plane = update.plane;
+    }
+
+    this.notifySimChange();
+  }
+
+  private notifySimChange(): void {
+    for (const listener of this.simListeners) {
+      listener();
+    }
+  }
+
+  private computeModelMatrices(simObject: SimObject): { modelMatrix: Float32Array; normalMatrix: Float32Array } {
+    let modelMatrix: Float32Array;
+    switch (simObject.plane) {
+      case 'GB':
+        modelMatrix = mat4FromZRotation(simObject.rotationY);
+        break;
+      case 'YG':
+        modelMatrix = mat4FromXRotation(simObject.rotationY);
+        break;
+      default:
+        modelMatrix = mat4FromYRotation(simObject.rotationY);
+        break;
+    }
+
+    return {
+      modelMatrix,
+      normalMatrix: mat3FromMat4(modelMatrix),
+    };
   }
 
   isAxisVisible(): boolean {

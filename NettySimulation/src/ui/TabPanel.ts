@@ -92,7 +92,7 @@ export class TabPanel {
     this.refreshToggleIcon();
   }
 
-  private setActiveTab(id: string): void {
+  setActiveTab(id: string): void {
     if (this.activeTabId === id) {
       return;
     }

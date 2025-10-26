@@ -72,6 +72,30 @@ export function mat4FromYRotation(angle: number): Float32Array {
   ]);
 }
 
+export function mat4FromXRotation(angle: number): Float32Array {
+  const c = Math.cos(angle);
+  const s = Math.sin(angle);
+
+  return new Float32Array([
+    1, 0, 0, 0,
+    0, c, -s, 0,
+    0, s, c, 0,
+    0, 0, 0, 1,
+  ]);
+}
+
+export function mat4FromZRotation(angle: number): Float32Array {
+  const c = Math.cos(angle);
+  const s = Math.sin(angle);
+
+  return new Float32Array([
+    c, -s, 0, 0,
+    s, c, 0, 0,
+    0, 0, 1, 0,
+    0, 0, 0, 1,
+  ]);
+}
+
 export function mat4Perspective(fovy: number, aspect: number, near: number, far: number): Float32Array {
   const f = 1.0 / Math.tan(fovy / 2);
   const nf = 1 / (near - far);
