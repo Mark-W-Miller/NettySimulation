@@ -4,9 +4,9 @@ import { App } from '../app/App';
 type AxisKey = 'x' | 'y' | 'z';
 
 const AXIS_LABELS: Record<AxisKey, string> = {
-  x: 'Show X Axis',
-  y: 'Show Y Axis',
-  z: 'Show Z Axis',
+  x: 'Show X Axis (R)',
+  y: 'Show Y Axis (Y)',
+  z: 'Show Z Axis (B)',
 };
 
 export function createDisplayTab(app: App): HTMLElement {

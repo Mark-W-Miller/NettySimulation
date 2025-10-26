@@ -39,7 +39,7 @@ interface SimObject {
   rotationY: number;
   speedPerTick: number;
   direction: 1 | -1;
-  plane: 'YG' | 'GB';
+  plane: 'YG' | 'GB' | 'YB';
 }
 
 export class App {
@@ -428,9 +428,12 @@ export class App {
     let modelMatrix: Float32Array;
     switch (simObject.plane) {
       case 'GB':
-        modelMatrix = mat4FromZRotation(simObject.rotationY);
+        modelMatrix = mat4FromYRotation(simObject.rotationY);
         break;
       case 'YG':
+        modelMatrix = mat4FromZRotation(simObject.rotationY);
+        break;
+      case 'YB':
         modelMatrix = mat4FromXRotation(simObject.rotationY);
         break;
       default:
@@ -450,6 +453,8 @@ export class App {
         return new Float32Array([0, 1, 0]);
       case 'YG':
         return new Float32Array([0, 0, 1]);
+      case 'YB':
+        return new Float32Array([1, 0, 0]);
       default:
         return new Float32Array([1, 0, 0]);
     }

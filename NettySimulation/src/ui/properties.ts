@@ -44,10 +44,12 @@ export function createPropertiesTab(app: App): HTMLElement {
   planeLegend.textContent = 'Spin Plane';
   planeGroup.appendChild(planeLegend);
 
-  const planeYG = createRadio('properties-plane', 'YG', 'YG pin plane');
-  const planeGB = createRadio('properties-plane', 'GB', 'GB spin plane');
+  const planeYG = createRadio('properties-plane', 'YG', 'Spin about B axis (YG)');
+  const planeGB = createRadio('properties-plane', 'GB', 'Spin about Y axis (GB)');
+  const planeYB = createRadio('properties-plane', 'YB', 'Spin about G axis (YB)');
   planeGroup.appendChild(planeYG.wrapper);
   planeGroup.appendChild(planeGB.wrapper);
+  planeGroup.appendChild(planeYB.wrapper);
 
   const segmentsGroup = document.createElement('div');
   segmentsGroup.className = 'properties-group';
@@ -124,11 +126,16 @@ export function createPropertiesTab(app: App): HTMLElement {
     }
     const speedValue = Number.parseFloat(speedInput.value);
     const direction = directionCW.input.checked ? 1 : -1;
-    const plane = planeYG.input.checked ? 'YG' : 'GB';
+    let plane: 'YG' | 'GB' | 'YB' = 'YB';
+    if (planeYG.input.checked) {
+      plane = 'YG';
+    } else if (planeGB.input.checked) {
+      plane = 'GB';
+    }
     app.updateSelectedSimObject({
       speedPerTick: Number.isFinite(speedValue) ? speedValue : selected.speedPerTick,
       direction: direction as 1 | -1,
-      plane: plane as 'YG' | 'GB',
+      plane,
     });
   };
 
@@ -137,6 +144,7 @@ export function createPropertiesTab(app: App): HTMLElement {
   directionCCW.input.addEventListener('change', applyChanges);
   planeYG.input.addEventListener('change', applyChanges);
   planeGB.input.addEventListener('change', applyChanges);
+  planeYB.input.addEventListener('change', applyChanges);
 
   latInput.addEventListener('change', () => {
     const lat = Number.parseInt(latInput.value, 10);
@@ -173,10 +181,12 @@ export function createPropertiesTab(app: App): HTMLElement {
       directionCCW.input.disabled = true;
       planeYG.input.disabled = true;
       planeGB.input.disabled = true;
+      planeYB.input.disabled = true;
       directionCW.input.checked = false;
       directionCCW.input.checked = false;
       planeYG.input.checked = false;
       planeGB.input.checked = false;
+      planeYB.input.checked = false;
       return;
     }
 
@@ -186,6 +196,7 @@ export function createPropertiesTab(app: App): HTMLElement {
     directionCCW.input.disabled = false;
     planeYG.input.disabled = false;
     planeGB.input.disabled = false;
+    planeYB.input.disabled = false;
 
     speedInput.value = selected.speedPerTick.toFixed(2);
     if (selected.direction >= 0) {
@@ -196,13 +207,9 @@ export function createPropertiesTab(app: App): HTMLElement {
       directionCCW.input.checked = true;
     }
 
-    if (selected.plane === 'YG') {
-      planeYG.input.checked = true;
-      planeGB.input.checked = false;
-    } else {
-      planeYG.input.checked = false;
-      planeGB.input.checked = true;
-    }
+    planeYG.input.checked = selected.plane === 'YG';
+    planeGB.input.checked = selected.plane === 'GB';
+    planeYB.input.checked = selected.plane === 'YB';
   };
 
   const unsubscribe = app.onSimChange(() => {
