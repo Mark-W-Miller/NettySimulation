@@ -63,7 +63,7 @@ export function createPropertiesTab(app: App): HTMLElement {
   const latInput = document.createElement('input');
   latInput.type = 'number';
   latInput.id = 'properties-latitude';
-  latInput.min = '8';
+  latInput.min = '1';
   latInput.max = '256';
   latInput.step = '1';
   latInput.className = 'properties-number properties-number--compact';
@@ -79,7 +79,7 @@ export function createPropertiesTab(app: App): HTMLElement {
   const lonInput = document.createElement('input');
   lonInput.type = 'number';
   lonInput.id = 'properties-longitude';
-  lonInput.min = '8';
+  lonInput.min = '1';
   lonInput.max = '256';
   lonInput.step = '1';
   lonInput.className = 'properties-number properties-number--compact';

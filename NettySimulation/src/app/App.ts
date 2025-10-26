@@ -477,8 +477,8 @@ export class App {
   }
 
   setSphereSegments(lat: number, lon: number): void {
-    const clampedLat = Math.max(8, Math.floor(lat));
-    const clampedLon = Math.max(8, Math.floor(lon));
+    const clampedLat = Math.max(1, Math.floor(lat));
+    const clampedLon = Math.max(1, Math.floor(lon));
 
     if (clampedLat === this.sphereSegments.lat && clampedLon === this.sphereSegments.lon) {
       return;
@@ -567,11 +567,30 @@ export class App {
         }
 
         vec3 baseColor = vColor * (ambient + (1.0 - ambient) * diffuse);
-        float planeLength = length(uPlaneVector);
-        float gradient = planeLength > 0.0 ? dot(normalize(vWorldPosition), normalize(uPlaneVector)) : 0.0;
-        float brightness = clamp(1.0 + uShadingIntensity * gradient, 0.0, 2.0);
-        vec3 shaded = clamp(baseColor * brightness, 0.0, 1.0);
-        gl_FragColor = vec4(shaded, 1.0);
+
+        // Treat the spin axis as the shading reference; if it is degenerate, fall back to base lighting.
+        float axisLength = length(uPlaneVector);
+        if (axisLength < 0.0001) {
+          gl_FragColor = vec4(baseColor, 1.0);
+          return;
+        }
+
+        vec3 spinAxis = normalize(uPlaneVector);
+        vec3 surfaceDirection = normalize(vWorldPosition);
+
+        // Polar alignment describes how far a surface point is from the spin plane (equator).
+        float alignment = dot(surfaceDirection, spinAxis);
+        float equatorProximity = clamp(1.0 - abs(alignment), 0.0, 1.0);
+
+        // Low intensity yields a thin equatorial ring; high intensity flattens into a uniformly lit hemisphere.
+        float intensity = clamp(uShadingIntensity, 0.0, 1.0);
+        float falloffPower = mix(6.0, 0.5, intensity);
+        float ringProfile = pow(max(equatorProximity, 0.0001), falloffPower);
+        float hemisphereFloor = intensity;
+        float brightness = max(hemisphereFloor, ringProfile);
+
+        vec3 shaded = baseColor * brightness;
+        gl_FragColor = vec4(clamp(shaded, 0.0, 1.0), 1.0);
       }
     `;
 
