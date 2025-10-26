@@ -49,6 +49,63 @@ export function createPropertiesTab(app: App): HTMLElement {
   planeGroup.appendChild(planeYG.wrapper);
   planeGroup.appendChild(planeGB.wrapper);
 
+  const segmentsGroup = document.createElement('div');
+  segmentsGroup.className = 'properties-group';
+
+  const latRow = document.createElement('div');
+  latRow.className = 'properties-inline';
+  const latLabel = document.createElement('label');
+  latLabel.className = 'properties-label';
+  latLabel.textContent = 'Latitude Bands';
+  latLabel.htmlFor = 'properties-latitude';
+  const latInput = document.createElement('input');
+  latInput.type = 'number';
+  latInput.id = 'properties-latitude';
+  latInput.min = '8';
+  latInput.max = '256';
+  latInput.step = '1';
+  latInput.className = 'properties-number properties-number--compact';
+  latRow.appendChild(latLabel);
+  latRow.appendChild(latInput);
+
+  const lonRow = document.createElement('div');
+  lonRow.className = 'properties-inline';
+  const lonLabel = document.createElement('label');
+  lonLabel.className = 'properties-label';
+  lonLabel.textContent = 'Longitude Bands';
+  lonLabel.htmlFor = 'properties-longitude';
+  const lonInput = document.createElement('input');
+  lonInput.type = 'number';
+  lonInput.id = 'properties-longitude';
+  lonInput.min = '8';
+  lonInput.max = '256';
+  lonInput.step = '1';
+  lonInput.className = 'properties-number properties-number--compact';
+  lonRow.appendChild(lonLabel);
+  lonRow.appendChild(lonInput);
+
+  segmentsGroup.appendChild(latRow);
+  segmentsGroup.appendChild(lonRow);
+
+  const shadingGroup = document.createElement('div');
+  shadingGroup.className = 'properties-group';
+  const shadingLabel = document.createElement('label');
+  shadingLabel.className = 'properties-label';
+  shadingLabel.textContent = 'Shading Intensity';
+  shadingLabel.htmlFor = 'properties-shading';
+  const shadingSlider = document.createElement('input');
+  shadingSlider.type = 'range';
+  shadingSlider.id = 'properties-shading';
+  shadingSlider.min = '0';
+  shadingSlider.max = '1';
+  shadingSlider.step = '0.05';
+  shadingSlider.className = 'sim-speed-slider';
+  const shadingValue = document.createElement('span');
+  shadingValue.className = 'properties-shading-value';
+  shadingGroup.appendChild(shadingLabel);
+  shadingGroup.appendChild(shadingSlider);
+  shadingGroup.appendChild(shadingValue);
+
   speedGroup.appendChild(speedLabel);
   speedGroup.appendChild(speedInput);
 
@@ -57,6 +114,8 @@ export function createPropertiesTab(app: App): HTMLElement {
   container.appendChild(speedGroup);
   container.appendChild(directionGroup);
   container.appendChild(planeGroup);
+  container.appendChild(segmentsGroup);
+  container.appendChild(shadingGroup);
 
   const applyChanges = () => {
     const selected = app.getSelectedSimObject();
@@ -79,7 +138,32 @@ export function createPropertiesTab(app: App): HTMLElement {
   planeYG.input.addEventListener('change', applyChanges);
   planeGB.input.addEventListener('change', applyChanges);
 
+  latInput.addEventListener('change', () => {
+    const lat = Number.parseInt(latInput.value, 10);
+    const current = app.getSphereSegments();
+    app.setSphereSegments(Number.isFinite(lat) ? lat : current.lat, current.lon);
+  });
+
+  lonInput.addEventListener('change', () => {
+    const lon = Number.parseInt(lonInput.value, 10);
+    const current = app.getSphereSegments();
+    app.setSphereSegments(current.lat, Number.isFinite(lon) ? lon : current.lon);
+  });
+
+  shadingSlider.addEventListener('input', () => {
+    const value = Number.parseFloat(shadingSlider.value);
+    app.setShadingIntensity(Number.isFinite(value) ? value : app.getShadingIntensity());
+    shadingValue.textContent = parseFloat(shadingSlider.value).toFixed(2);
+  });
+
   const updateUI = () => {
+    const segments = app.getSphereSegments();
+    latInput.value = String(segments.lat);
+    lonInput.value = String(segments.lon);
+    const shading = app.getShadingIntensity();
+    shadingSlider.value = shading.toString();
+    shadingValue.textContent = shading.toFixed(2);
+
     const selected = app.getSelectedSimObject();
     if (!selected) {
       status.textContent = 'Select a simulation object to edit its properties.';

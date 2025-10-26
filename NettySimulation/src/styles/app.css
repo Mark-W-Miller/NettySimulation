@@ -172,6 +172,12 @@ body {
   cursor: pointer;
 }
 
+.display-axis-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
 .sim-tab {
   display: flex;
   flex-direction: column;
@@ -299,6 +305,10 @@ body {
   color: #e6ecff;
 }
 
+.properties-number--compact {
+  max-width: 90px;
+}
+
 .properties-fieldset {
   border: 1px solid rgba(90, 120, 200, 0.25);
   border-radius: 0.75rem;
@@ -327,4 +337,15 @@ body {
 .properties-radio input[type="radio"] {
   accent-color: #5d8dff;
   cursor: pointer;
+}
+
+.properties-inline {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.properties-shading-value {
+  font-size: 0.85rem;
+  color: rgba(214, 225, 255, 0.8);
 }

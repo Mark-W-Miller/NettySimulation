@@ -1,5 +1,5 @@
 // App.ts — renders a matte sphere with custom WebGL orbit controls (no external deps)
-import { Assets, type AxisMesh, type SphereMesh } from '../engine/Assets';
+import { Assets, type AxisMesh, type AxisSet, type SphereMesh } from '../engine/Assets';
 import { CameraController } from './camera';
 import {
   clamp,
@@ -29,6 +29,8 @@ interface ShaderProgram {
   uniformClipEnabled: WebGLUniformLocation;
   uniformClipCenter: WebGLUniformLocation;
   uniformClipRadius: WebGLUniformLocation;
+  uniformShadingIntensity: WebGLUniformLocation;
+  uniformPlaneVector: WebGLUniformLocation;
 }
 
 interface SimObject {
@@ -45,8 +47,10 @@ export class App {
   private gl: WebGLRenderingContext | null = null;
   private program: ShaderProgram | null = null;
   private sphere: SphereMesh | null = null;
-  private axes: AxisMesh | null = null;
-  private axisVisible = true;
+  private axes: AxisSet | null = null;
+  private axisVisibility: Record<'x' | 'y' | 'z', boolean> = { x: true, y: true, z: true };
+  private sphereSegments = { lat: 48, lon: 48 };
+  private shadingIntensity = 0.4;
 
   private readonly camera = new CameraController();
   private readonly identityModelMatrix = mat4Identity();
@@ -85,8 +89,8 @@ export class App {
     }
 
     const program = this.createProgram(gl);
-    const sphere = Assets.createSphereMesh(gl);
-    const axes = Assets.createAxisMesh(gl);
+    const sphere = Assets.createSphereMesh(gl, this.sphereSegments.lat, this.sphereSegments.lon);
+    const axes = Assets.createAxisSet(gl);
 
     this.canvas = canvas;
     this.gl = gl;
@@ -145,7 +149,7 @@ export class App {
     }
 
     if (this.gl && this.axes) {
-      Assets.disposeAxisMesh(this.gl, this.axes);
+      Assets.disposeAxisSet(this.gl, this.axes);
     }
 
     if (this.gl && this.program) {
@@ -206,7 +210,8 @@ export class App {
     const position = this.camera.getPosition();
     const clipRadius = 1.02;
     const cameraDistanceFromCenter = Math.hypot(position[0], position[1], position[2]);
-    const shouldRenderAxes = this.axisVisible && Boolean(this.axes);
+    const anyAxisVisible = this.axisVisibility.x || this.axisVisibility.y || this.axisVisibility.z;
+    const shouldRenderAxes = anyAxisVisible && Boolean(this.axes);
     const clipEnabled = shouldRenderAxes && cameraDistanceFromCenter > clipRadius + 0.05;
 
     // Build the camera view transform.
@@ -229,6 +234,8 @@ export class App {
       const { modelMatrix, normalMatrix } = this.computeModelMatrices(simObject);
       gl.uniformMatrix4fv(program.uniformModel, false, modelMatrix);
       gl.uniformMatrix3fv(program.uniformNormalMatrix, false, normalMatrix);
+      gl.uniform1f(program.uniformShadingIntensity, this.shadingIntensity);
+      gl.uniform3fv(program.uniformPlaneVector, this.getPlaneNormal(simObject.plane));
 
       const mesh = simObject.mesh;
 
@@ -269,53 +276,67 @@ export class App {
 
     // Draw axes
     if (shouldRenderAxes && this.axes) {
-      // Upload identity transforms for static axes.
-      gl.uniformMatrix4fv(program.uniformModel, false, this.identityModelMatrix);
-      gl.uniformMatrix3fv(program.uniformNormalMatrix, false, this.identityNormalMatrix);
+      const axisEntries: Array<['x' | 'y' | 'z', AxisMesh]> = [
+        ['x', this.axes.x],
+        ['y', this.axes.y],
+        ['z', this.axes.z],
+      ];
 
-      // Bind axis vertex positions.
-      gl.bindBuffer(gl.ARRAY_BUFFER, this.axes.positionBuffer);
-      // Describe position layout.
-      gl.vertexAttribPointer(program.attribPosition, 3, gl.FLOAT, false, 0, 0);
-      // Enable the position attribute.
-      gl.enableVertexAttribArray(program.attribPosition);
+      for (const [axisKey, mesh] of axisEntries) {
+        if (!this.axisVisibility[axisKey]) {
+          continue;
+        }
 
-      // Bind axis normals for lighting.
-      gl.bindBuffer(gl.ARRAY_BUFFER, this.axes.normalBuffer);
-      // Describe normal layout.
-      gl.vertexAttribPointer(program.attribNormal, 3, gl.FLOAT, false, 0, 0);
-      // Enable the normal attribute.
-      gl.enableVertexAttribArray(program.attribNormal);
+        // Upload identity transforms for static axes.
+        gl.uniformMatrix4fv(program.uniformModel, false, this.identityModelMatrix);
+        gl.uniformMatrix3fv(program.uniformNormalMatrix, false, this.identityNormalMatrix);
 
-      // Bind axis vertex colors.
-      gl.bindBuffer(gl.ARRAY_BUFFER, this.axes.colorBuffer);
-      // Describe color layout.
-      gl.vertexAttribPointer(program.attribColor, 3, gl.FLOAT, false, 0, 0);
-      // Enable the color attribute.
-      gl.enableVertexAttribArray(program.attribColor);
+        // Bind axis vertex positions.
+        gl.bindBuffer(gl.ARRAY_BUFFER, mesh.positionBuffer);
+        // Describe position layout.
+        gl.vertexAttribPointer(program.attribPosition, 3, gl.FLOAT, false, 0, 0);
+        // Enable the position attribute.
+        gl.enableVertexAttribArray(program.attribPosition);
 
-      // Bind axis indices.
-      gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, this.axes.indexBuffer);
-      // Render all faces of the axis prisms.
-      gl.disable(gl.CULL_FACE);
-      // Offset depth values to avoid z-fighting with the sphere.
-      gl.enable(gl.POLYGON_OFFSET_FILL);
-      // Apply the polygon offset parameters.
-      gl.polygonOffset(1.0, 1.0);
-      // Instruct shader to use per-vertex colors.
-      gl.uniform1f(program.uniformUseVertexColor, 1.0);
-      // Clip beams when outside sphere.
-      gl.uniform1f(program.uniformClipEnabled, clipEnabled ? 1.0 : 0.0);
-      // Center the clipping sphere at the origin.
-      gl.uniform3f(program.uniformClipCenter, 0.0, 0.0, 0.0);
-      // Use the precomputed clip radius.
-      gl.uniform1f(program.uniformClipRadius, clipRadius);
-      // Draw the axis prisms.
-      gl.drawElements(gl.TRIANGLES, this.axes.indexCount, gl.UNSIGNED_SHORT, 0);
-      // Restore default depth behavior.
-      gl.disable(gl.POLYGON_OFFSET_FILL);
-      // Reinstate face culling for future draws.
-      gl.enable(gl.CULL_FACE);
+        // Bind axis normals for lighting.
+        gl.bindBuffer(gl.ARRAY_BUFFER, mesh.normalBuffer);
+        // Describe normal layout.
+        gl.vertexAttribPointer(program.attribNormal, 3, gl.FLOAT, false, 0, 0);
+        // Enable the normal attribute.
+        gl.enableVertexAttribArray(program.attribNormal);
+
+        // Bind axis vertex colors.
+        gl.bindBuffer(gl.ARRAY_BUFFER, mesh.colorBuffer);
+        // Describe color layout.
+        gl.vertexAttribPointer(program.attribColor, 3, gl.FLOAT, false, 0, 0);
+        // Enable the color attribute.
+        gl.enableVertexAttribArray(program.attribColor);
+
+        // Bind axis indices.
+        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, mesh.indexBuffer);
+        // Render all faces of the axis cylinders.
+        gl.disable(gl.CULL_FACE);
+        // Offset depth values to avoid z-fighting with the sphere.
+        gl.enable(gl.POLYGON_OFFSET_FILL);
+        // Apply the polygon offset parameters.
+        gl.polygonOffset(1.0, 1.0);
+        // Instruct shader to use per-vertex colors and reset gradient shading.
+        gl.uniform1f(program.uniformUseVertexColor, 1.0);
+        gl.uniform1f(program.uniformShadingIntensity, 0.0);
+        gl.uniform3f(program.uniformPlaneVector, 0.0, 0.0, 0.0);
+        // Clip beams when outside sphere.
+        gl.uniform1f(program.uniformClipEnabled, clipEnabled ? 1.0 : 0.0);
+        // Center the clipping sphere at the origin.
+        gl.uniform3f(program.uniformClipCenter, 0.0, 0.0, 0.0);
+        // Use the precomputed clip radius.
+        gl.uniform1f(program.uniformClipRadius, clipRadius);
+        // Draw the axis cylinder.
+        gl.drawElements(gl.TRIANGLES, mesh.indexCount, gl.UNSIGNED_SHORT, 0);
+        // Restore default depth behavior.
+        gl.disable(gl.POLYGON_OFFSET_FILL);
+        // Reinstate face culling for future draws.
+        gl.enable(gl.CULL_FACE);
+      }
     }
   }
 
@@ -423,12 +444,73 @@ export class App {
     };
   }
 
-  isAxisVisible(): boolean {
-    return this.axisVisible;
+  private getPlaneNormal(plane: SimObject['plane']): Float32Array {
+    switch (plane) {
+      case 'GB':
+        return new Float32Array([0, 1, 0]);
+      case 'YG':
+        return new Float32Array([0, 0, 1]);
+      default:
+        return new Float32Array([1, 0, 0]);
+    }
   }
 
-  setAxisVisible(visible: boolean): void {
-    this.axisVisible = visible;
+  getAxisVisibility(): Readonly<Record<'x' | 'y' | 'z', boolean>> {
+    return { ...this.axisVisibility };
+  }
+
+  isAxisVisible(axis: 'x' | 'y' | 'z'): boolean {
+    return this.axisVisibility[axis];
+  }
+
+  setAxisVisibility(axis: 'x' | 'y' | 'z', visible: boolean): void {
+    if (this.axisVisibility[axis] === visible) {
+      return;
+    }
+    this.axisVisibility[axis] = visible;
+    this.notifySimChange();
+  }
+
+  getSphereSegments(): Readonly<{ lat: number; lon: number }> {
+    return { ...this.sphereSegments };
+  }
+
+  setSphereSegments(lat: number, lon: number): void {
+    const clampedLat = Math.max(8, Math.floor(lat));
+    const clampedLon = Math.max(8, Math.floor(lon));
+
+    if (clampedLat === this.sphereSegments.lat && clampedLon === this.sphereSegments.lon) {
+      return;
+    }
+
+    this.sphereSegments = { lat: clampedLat, lon: clampedLon };
+
+    if (this.gl) {
+      const oldMesh = this.sphere;
+      const newMesh = Assets.createSphereMesh(this.gl, clampedLat, clampedLon);
+      this.sphere = newMesh;
+      if (this.sphereObject) {
+        this.sphereObject.mesh = newMesh;
+      }
+      if (oldMesh) {
+        Assets.disposeSphereMesh(this.gl, oldMesh);
+      }
+    }
+
+    this.notifySimChange();
+  }
+
+  getShadingIntensity(): number {
+    return this.shadingIntensity;
+  }
+
+  setShadingIntensity(intensity: number): void {
+    const clamped = clamp(intensity, 0, 1);
+    if (clamped === this.shadingIntensity) {
+      return;
+    }
+    this.shadingIntensity = clamped;
+    this.notifySimChange();
   }
 
   private createProgram(gl: WebGLRenderingContext): ShaderProgram {
@@ -468,18 +550,26 @@ export class App {
       uniform float uClipEnabled;
       uniform vec3 uClipCenter;
       uniform float uClipRadius;
+      uniform float uShadingIntensity;
+      uniform vec3 uPlaneVector;
 
       void main() {
         vec3 normal = normalize(vNormal);
         float diffuse = max(dot(normal, normalize(uLightDirection)), 0.0);
         float ambient = 0.25;
+
         if (uClipEnabled > 0.5) {
           float distanceToCenter = distance(vWorldPosition, uClipCenter);
           if (distanceToCenter < uClipRadius) {
             discard;
           }
         }
-        vec3 shaded = vColor * (ambient + (1.0 - ambient) * diffuse);
+
+        vec3 baseColor = vColor * (ambient + (1.0 - ambient) * diffuse);
+        float planeLength = length(uPlaneVector);
+        float gradient = planeLength > 0.0 ? dot(normalize(vWorldPosition), normalize(uPlaneVector)) : 0.0;
+        float brightness = clamp(1.0 + uShadingIntensity * gradient, 0.0, 2.0);
+        vec3 shaded = clamp(baseColor * brightness, 0.0, 1.0);
         gl_FragColor = vec4(shaded, 1.0);
       }
     `;
@@ -521,6 +611,8 @@ export class App {
     const uniformClipEnabled = getRequiredUniform(gl, program, 'uClipEnabled');
     const uniformClipCenter = getRequiredUniform(gl, program, 'uClipCenter');
     const uniformClipRadius = getRequiredUniform(gl, program, 'uClipRadius');
+    const uniformShadingIntensity = getRequiredUniform(gl, program, 'uShadingIntensity');
+    const uniformPlaneVector = getRequiredUniform(gl, program, 'uPlaneVector');
 
     return {
       program,
@@ -537,6 +629,8 @@ export class App {
       uniformClipEnabled,
       uniformClipCenter,
       uniformClipRadius,
+      uniformShadingIntensity,
+      uniformPlaneVector,
     };
   }
 
