@@ -103,16 +103,19 @@ function buildCylinderGeometry(
   const indices: number[] = [];
 
   const halfLength = length / 2;
+  const positiveRadius = radius;
+  const negativeRadius = radius * 0.55;
+  const darken = 0.35;
 
   for (let i = 0; i <= segments; i += 1) {
     const angle = (i / segments) * Math.PI * 2;
     const cos = Math.cos(angle);
     const sin = Math.sin(angle);
 
-    pushVertex(axis, halfLength, cos, sin, radius, positions, normals);
+    pushVertex(axis, halfLength, cos, sin, positiveRadius, positions, normals);
     colors.push(...color);
-    pushVertex(axis, -halfLength, cos, sin, radius, positions, normals);
-    colors.push(...color);
+    pushVertex(axis, -halfLength, cos, sin, negativeRadius, positions, normals);
+    colors.push(color[0] * darken, color[1] * darken, color[2] * darken);
   }
 
   for (let i = 0; i < segments; i += 1) {

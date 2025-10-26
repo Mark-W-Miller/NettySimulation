@@ -17,6 +17,7 @@ import {
   mat4Identity,
   mat4LookAt,
   mat4Perspective,
+  mat4Multiply,
   normalizeVec3,
 } from './math3d';
 
@@ -42,6 +43,8 @@ export class App {
   private readonly camera = new CameraController();
   private readonly identityModelMatrix = mat4Identity();
   private readonly identityNormalMatrix = mat3Identity();
+  private readonly alignYAxisToZMatrix = mat4FromXRotation(-Math.PI / 2);
+  private readonly alignYAxisToXMatrix = mat4FromZRotation(-Math.PI / 2);
   private viewMatrix = mat4Identity();
   private projectionMatrix = mat4Identity();
 
@@ -373,21 +376,29 @@ export class App {
   }
 
   private computeModelMatrices(simObject: SimObject): { modelMatrix: Float32Array; normalMatrix: Float32Array } {
-    let modelMatrix: Float32Array;
+    let rotationMatrix: Float32Array;
+    let alignmentMatrix: Float32Array;
+
     switch (simObject.plane) {
       case 'GB':
-        modelMatrix = mat4FromYRotation(simObject.rotationY);
+        rotationMatrix = mat4FromYRotation(simObject.rotationY);
+        alignmentMatrix = this.identityModelMatrix;
         break;
       case 'YG':
-        modelMatrix = mat4FromZRotation(simObject.rotationY);
+        rotationMatrix = mat4FromZRotation(simObject.rotationY);
+        alignmentMatrix = this.alignYAxisToZMatrix;
         break;
       case 'YB':
-        modelMatrix = mat4FromXRotation(simObject.rotationY);
+        rotationMatrix = mat4FromXRotation(simObject.rotationY);
+        alignmentMatrix = this.alignYAxisToXMatrix;
         break;
       default:
-        modelMatrix = mat4FromYRotation(simObject.rotationY);
+        rotationMatrix = mat4FromYRotation(simObject.rotationY);
+        alignmentMatrix = this.identityModelMatrix;
         break;
     }
+
+    const modelMatrix = mat4Multiply(rotationMatrix, alignmentMatrix);
 
     return {
       modelMatrix,
