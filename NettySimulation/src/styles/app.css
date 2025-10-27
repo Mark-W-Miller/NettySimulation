@@ -86,6 +86,10 @@ body {
   flex: 1;
 }
 
+.tab-panel__content {
+  display: none;
+}
+
 .tab-panel__tabs.is-disabled {
   opacity: 0.4;
   pointer-events: none;

@@ -66,6 +66,7 @@ export class TabPanel {
     content.classList.add('tab-panel__content');
     content.setAttribute('data-tab-content', config.id);
     content.hidden = true;
+    content.style.display = 'none';
 
     this.tabsContainer.appendChild(button);
     this.bodyContainer.appendChild(content);
@@ -102,6 +103,7 @@ export class TabPanel {
       button.classList.toggle('is-active', isActive);
       button.setAttribute('aria-selected', isActive ? 'true' : 'false');
       content.hidden = !isActive;
+      content.style.display = isActive ? '' : 'none';
     }
 
     this.activeTabId = id;

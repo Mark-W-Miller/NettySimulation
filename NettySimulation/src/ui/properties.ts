@@ -1,5 +1,7 @@
-// properties.ts — renders the Properties tab for the selected simulation object
+// properties.ts — renders the Properties tab as expandable editors for each sim object
 import { App } from '../app/App';
+
+type ObjectUpdate = Parameters<App['updateSelectedSimObject']>[0];
 
 export function createPropertiesTab(app: App): HTMLElement {
   const container = document.createElement('div');
@@ -7,216 +9,261 @@ export function createPropertiesTab(app: App): HTMLElement {
 
   const header = document.createElement('div');
   header.className = 'properties-header';
-  header.textContent = 'Object Properties';
+  header.textContent = 'Simulation Objects';
 
-  const status = document.createElement('div');
-  status.className = 'properties-status';
+  const description = document.createElement('div');
+  description.className = 'properties-status';
+  description.textContent = 'Twist open an object to edit its spin settings.';
 
-  const speedGroup = document.createElement('div');
-  speedGroup.className = 'properties-group';
-
-  const speedLabel = document.createElement('label');
-  speedLabel.className = 'properties-label';
-  speedLabel.textContent = 'Speed per Tick';
-  speedLabel.htmlFor = 'properties-speed';
-
-  const speedInput = document.createElement('input');
-  speedInput.type = 'number';
-  speedInput.id = 'properties-speed';
-  speedInput.min = '0.1';
-  speedInput.step = '0.1';
-  speedInput.className = 'properties-number';
-
-  const directionGroup = document.createElement('fieldset');
-  directionGroup.className = 'properties-fieldset';
-  const directionLegend = document.createElement('legend');
-  directionLegend.textContent = 'Direction';
-  directionGroup.appendChild(directionLegend);
-
-  const directionCW = createRadio('properties-direction', 'cw', 'Clockwise');
-  const directionCCW = createRadio('properties-direction', 'ccw', 'Counter Clockwise');
-  directionGroup.appendChild(directionCW.wrapper);
-  directionGroup.appendChild(directionCCW.wrapper);
-
-  const planeGroup = document.createElement('fieldset');
-  planeGroup.className = 'properties-fieldset';
-  const planeLegend = document.createElement('legend');
-  planeLegend.textContent = 'Spin Plane';
-  planeGroup.appendChild(planeLegend);
-
-  const planeYG = createRadio('properties-plane', 'YG', 'Spin about B axis (YG)');
-  const planeGB = createRadio('properties-plane', 'GB', 'Spin about Y axis (GB)');
-  const planeYB = createRadio('properties-plane', 'YB', 'Spin about G axis (YB)');
-  planeGroup.appendChild(planeYG.wrapper);
-  planeGroup.appendChild(planeGB.wrapper);
-  planeGroup.appendChild(planeYB.wrapper);
-
-  const segmentsGroup = document.createElement('div');
-  segmentsGroup.className = 'properties-group';
-
-  const latRow = document.createElement('div');
-  latRow.className = 'properties-inline';
-  const latLabel = document.createElement('label');
-  latLabel.className = 'properties-label';
-  latLabel.textContent = 'Latitude Bands';
-  latLabel.htmlFor = 'properties-latitude';
-  const latInput = document.createElement('input');
-  latInput.type = 'number';
-  latInput.id = 'properties-latitude';
-  latInput.min = '1';
-  latInput.max = '256';
-  latInput.step = '1';
-  latInput.className = 'properties-number properties-number--compact';
-  latRow.appendChild(latLabel);
-  latRow.appendChild(latInput);
-
-  const lonRow = document.createElement('div');
-  lonRow.className = 'properties-inline';
-  const lonLabel = document.createElement('label');
-  lonLabel.className = 'properties-label';
-  lonLabel.textContent = 'Longitude Bands';
-  lonLabel.htmlFor = 'properties-longitude';
-  const lonInput = document.createElement('input');
-  lonInput.type = 'number';
-  lonInput.id = 'properties-longitude';
-  lonInput.min = '1';
-  lonInput.max = '256';
-  lonInput.step = '1';
-  lonInput.className = 'properties-number properties-number--compact';
-  lonRow.appendChild(lonLabel);
-  lonRow.appendChild(lonInput);
-
-  segmentsGroup.appendChild(latRow);
-  segmentsGroup.appendChild(lonRow);
-
-  const shadingGroup = document.createElement('div');
-  shadingGroup.className = 'properties-group';
-  const shadingLabel = document.createElement('label');
-  shadingLabel.className = 'properties-label';
-  shadingLabel.textContent = 'Shading Intensity';
-  shadingLabel.htmlFor = 'properties-shading';
-  const shadingSlider = document.createElement('input');
-  shadingSlider.type = 'range';
-  shadingSlider.id = 'properties-shading';
-  shadingSlider.min = '0';
-  shadingSlider.max = '1';
-  shadingSlider.step = '0.05';
-  shadingSlider.className = 'sim-speed-slider';
-  const shadingValue = document.createElement('span');
-  shadingValue.className = 'properties-shading-value';
-  shadingGroup.appendChild(shadingLabel);
-  shadingGroup.appendChild(shadingSlider);
-  shadingGroup.appendChild(shadingValue);
-
-  speedGroup.appendChild(speedLabel);
-  speedGroup.appendChild(speedInput);
+  const list = document.createElement('div');
+  list.className = 'properties-object-list';
 
   container.appendChild(header);
-  container.appendChild(status);
-  container.appendChild(speedGroup);
-  container.appendChild(directionGroup);
-  container.appendChild(planeGroup);
-  container.appendChild(segmentsGroup);
-  container.appendChild(shadingGroup);
+  container.appendChild(description);
+  container.appendChild(list);
 
-  const applyChanges = () => {
-    const selected = app.getSelectedSimObject();
-    if (!selected) {
-      return;
-    }
-    const speedValue = Number.parseFloat(speedInput.value);
-    const direction = directionCW.input.checked ? 1 : -1;
-    let plane: 'YG' | 'GB' | 'YB' = 'YB';
-    if (planeYG.input.checked) {
-      plane = 'YG';
-    } else if (planeGB.input.checked) {
-      plane = 'GB';
-    }
-    app.updateSelectedSimObject({
-      speedPerTick: Number.isFinite(speedValue) ? speedValue : selected.speedPerTick,
-      direction: direction as 1 | -1,
-      plane,
-    });
-  };
+  const openObjects = new Set<string>();
 
-  speedInput.addEventListener('change', applyChanges);
-  directionCW.input.addEventListener('change', applyChanges);
-  directionCCW.input.addEventListener('change', applyChanges);
-  planeYG.input.addEventListener('change', applyChanges);
-  planeGB.input.addEventListener('change', applyChanges);
-  planeYB.input.addEventListener('change', applyChanges);
+  const renderObjects = () => {
+    list.innerHTML = '';
 
-  latInput.addEventListener('change', () => {
-    const lat = Number.parseInt(latInput.value, 10);
-    const current = app.getSphereSegments();
-    app.setSphereSegments(Number.isFinite(lat) ? lat : current.lat, current.lon);
-  });
-
-  lonInput.addEventListener('change', () => {
-    const lon = Number.parseInt(lonInput.value, 10);
-    const current = app.getSphereSegments();
-    app.setSphereSegments(current.lat, Number.isFinite(lon) ? lon : current.lon);
-  });
-
-  shadingSlider.addEventListener('input', () => {
-    const value = Number.parseFloat(shadingSlider.value);
-    app.setShadingIntensity(Number.isFinite(value) ? value : app.getShadingIntensity());
-    shadingValue.textContent = parseFloat(shadingSlider.value).toFixed(2);
-  });
-
-  const updateUI = () => {
-    const segments = app.getSphereSegments();
-    latInput.value = String(segments.lat);
-    lonInput.value = String(segments.lon);
+    const simObjects = app.getSimObjects();
     const shading = app.getShadingIntensity();
-    shadingSlider.value = shading.toString();
-    shadingValue.textContent = shading.toFixed(2);
+    const segments = app.getSphereSegments();
+    const existingIds = new Set(simObjects.map((object) => object.id));
+    for (const id of Array.from(openObjects)) {
+      if (!existingIds.has(id)) {
+        openObjects.delete(id);
+      }
+    }
+    const selectedId = app.getSelectedSimObject()?.id ?? null;
+    if (selectedId) {
+      openObjects.add(selectedId);
+    }
 
-    const selected = app.getSelectedSimObject();
-    if (!selected) {
-      status.textContent = 'Select a simulation object to edit its properties.';
-      speedInput.value = '';
-      speedInput.disabled = true;
-      directionCW.input.disabled = true;
-      directionCCW.input.disabled = true;
-      planeYG.input.disabled = true;
-      planeGB.input.disabled = true;
-      planeYB.input.disabled = true;
-      directionCW.input.checked = false;
-      directionCCW.input.checked = false;
-      planeYG.input.checked = false;
-      planeGB.input.checked = false;
-      planeYB.input.checked = false;
+    if (simObjects.length === 0) {
+      const empty = document.createElement('div');
+      empty.className = 'properties-empty';
+      empty.textContent = 'No simulation objects available.';
+      list.appendChild(empty);
       return;
     }
 
-    status.textContent = `Editing: ${selected.id}`;
-    speedInput.disabled = false;
-    directionCW.input.disabled = false;
-    directionCCW.input.disabled = false;
-    planeYG.input.disabled = false;
-    planeGB.input.disabled = false;
-    planeYB.input.disabled = false;
+    for (const simObject of simObjects) {
+      const details = document.createElement('details');
+      details.className = 'properties-object';
+      if (openObjects.has(simObject.id)) {
+        details.open = true;
+      }
+      if (simObject.id === selectedId) {
+        details.classList.add('is-selected');
+      }
 
-    speedInput.value = selected.speedPerTick.toFixed(2);
-    if (selected.direction >= 0) {
-      directionCW.input.checked = true;
-      directionCCW.input.checked = false;
-    } else {
-      directionCW.input.checked = false;
-      directionCCW.input.checked = true;
+      details.addEventListener('toggle', () => {
+        if (details.open) {
+          openObjects.add(simObject.id);
+          app.selectSimObject(simObject.id);
+        } else {
+          openObjects.delete(simObject.id);
+        }
+      });
+
+      const summary = document.createElement('summary');
+      summary.className = 'properties-object-summary';
+      summary.textContent = simObject.id;
+      summary.addEventListener('click', () => {
+        app.selectSimObject(simObject.id);
+      });
+      details.appendChild(summary);
+
+      const form = document.createElement('div');
+      form.className = 'properties-object-form';
+
+      const applyUpdate = (update: ObjectUpdate) => {
+        app.selectSimObject(simObject.id);
+        app.updateSelectedSimObject(update);
+      };
+
+      const speedGroup = document.createElement('div');
+      speedGroup.className = 'properties-group';
+
+      const speedLabel = document.createElement('label');
+      speedLabel.className = 'properties-label';
+      speedLabel.textContent = 'Speed per Tick';
+      speedLabel.htmlFor = `properties-speed-${simObject.id}`;
+
+      const speedInput = document.createElement('input');
+      speedInput.type = 'number';
+      speedInput.id = `properties-speed-${simObject.id}`;
+      speedInput.min = '0.1';
+      speedInput.step = '0.1';
+      speedInput.className = 'properties-number';
+      speedInput.value = simObject.speedPerTick.toFixed(2);
+      speedInput.addEventListener('change', () => {
+        const value = Number.parseFloat(speedInput.value);
+        if (!Number.isFinite(value)) {
+          speedInput.value = simObject.speedPerTick.toFixed(2);
+          return;
+        }
+        applyUpdate({ speedPerTick: value });
+      });
+
+      speedGroup.appendChild(speedLabel);
+      speedGroup.appendChild(speedInput);
+
+      const directionGroup = document.createElement('fieldset');
+      directionGroup.className = 'properties-fieldset';
+      const directionLegend = document.createElement('legend');
+      directionLegend.textContent = 'Direction';
+      directionGroup.appendChild(directionLegend);
+
+      const directionGroupName = `properties-direction-${simObject.id}`;
+      const directionCW = createRadio(directionGroupName, 'cw', 'Clockwise');
+      const directionCCW = createRadio(directionGroupName, 'ccw', 'Counter Clockwise');
+      directionCW.input.checked = simObject.direction >= 0;
+      directionCCW.input.checked = simObject.direction < 0;
+      directionCW.input.addEventListener('change', () => {
+        if (directionCW.input.checked) {
+          applyUpdate({ direction: 1 });
+        }
+      });
+      directionCCW.input.addEventListener('change', () => {
+        if (directionCCW.input.checked) {
+          applyUpdate({ direction: -1 });
+        }
+      });
+      directionGroup.appendChild(directionCW.wrapper);
+      directionGroup.appendChild(directionCCW.wrapper);
+
+      const planeGroup = document.createElement('fieldset');
+      planeGroup.className = 'properties-fieldset';
+      const planeLegend = document.createElement('legend');
+      planeLegend.textContent = 'Spin Plane';
+      planeGroup.appendChild(planeLegend);
+
+      const planeGroupName = `properties-plane-${simObject.id}`;
+      const planeYG = createRadio(planeGroupName, 'YG', 'Spin about B axis (YG)');
+      const planeGB = createRadio(planeGroupName, 'GB', 'Spin about Y axis (GB)');
+      const planeYB = createRadio(planeGroupName, 'YB', 'Spin about G axis (YB)');
+      planeYG.input.checked = simObject.plane === 'YG';
+      planeGB.input.checked = simObject.plane === 'GB';
+      planeYB.input.checked = simObject.plane === 'YB';
+      planeYG.input.addEventListener('change', () => {
+        if (planeYG.input.checked) {
+          applyUpdate({ plane: 'YG' });
+        }
+      });
+      planeGB.input.addEventListener('change', () => {
+        if (planeGB.input.checked) {
+          applyUpdate({ plane: 'GB' });
+        }
+      });
+      planeYB.input.addEventListener('change', () => {
+        if (planeYB.input.checked) {
+          applyUpdate({ plane: 'YB' });
+        }
+      });
+      planeGroup.appendChild(planeYG.wrapper);
+      planeGroup.appendChild(planeGB.wrapper);
+      planeGroup.appendChild(planeYB.wrapper);
+
+      const shadingGroup = document.createElement('div');
+      shadingGroup.className = 'properties-group';
+      const shadingLabel = document.createElement('label');
+      shadingLabel.className = 'properties-label';
+      shadingLabel.textContent = 'Shading Intensity';
+      shadingLabel.htmlFor = `properties-shading-${simObject.id}`;
+      const shadingSlider = document.createElement('input');
+      shadingSlider.type = 'range';
+      shadingSlider.id = `properties-shading-${simObject.id}`;
+      shadingSlider.min = '0';
+      shadingSlider.max = '1';
+      shadingSlider.step = '0.05';
+      shadingSlider.className = 'sim-speed-slider';
+      shadingSlider.value = shading.toString();
+      const shadingValue = document.createElement('span');
+      shadingValue.className = 'properties-shading-value';
+      shadingValue.textContent = shading.toFixed(2);
+      shadingSlider.addEventListener('input', () => {
+        const value = Number.parseFloat(shadingSlider.value);
+        const clamped = Number.isFinite(value) ? value : app.getShadingIntensity();
+        app.setShadingIntensity(clamped);
+        shadingValue.textContent = clamped.toFixed(2);
+      });
+      shadingGroup.appendChild(shadingLabel);
+      shadingGroup.appendChild(shadingSlider);
+      shadingGroup.appendChild(shadingValue);
+
+      const segmentsGroup = document.createElement('div');
+      segmentsGroup.className = 'properties-group';
+
+      const latRow = document.createElement('div');
+      latRow.className = 'properties-inline';
+      const latLabel = document.createElement('label');
+      latLabel.className = 'properties-label';
+      latLabel.textContent = 'Latitude Bands';
+      latLabel.htmlFor = `properties-latitude-${simObject.id}`;
+      const latInput = document.createElement('input');
+      latInput.type = 'number';
+      latInput.id = `properties-latitude-${simObject.id}`;
+      latInput.min = '1';
+      latInput.max = '256';
+      latInput.step = '1';
+      latInput.className = 'properties-number properties-number--compact';
+      latInput.value = String(segments.lat);
+      latInput.addEventListener('change', () => {
+        const lat = Number.parseInt(latInput.value, 10);
+        const current = app.getSphereSegments();
+        const nextLat = Number.isFinite(lat) ? lat : current.lat;
+        app.setSphereSegments(nextLat, current.lon);
+        latInput.value = String(app.getSphereSegments().lat);
+      });
+      latRow.appendChild(latLabel);
+      latRow.appendChild(latInput);
+
+      const lonRow = document.createElement('div');
+      lonRow.className = 'properties-inline';
+      const lonLabel = document.createElement('label');
+      lonLabel.className = 'properties-label';
+      lonLabel.textContent = 'Longitude Bands';
+      lonLabel.htmlFor = `properties-longitude-${simObject.id}`;
+      const lonInput = document.createElement('input');
+      lonInput.type = 'number';
+      lonInput.id = `properties-longitude-${simObject.id}`;
+      lonInput.min = '1';
+      lonInput.max = '256';
+      lonInput.step = '1';
+      lonInput.className = 'properties-number properties-number--compact';
+      lonInput.value = String(segments.lon);
+      lonInput.addEventListener('change', () => {
+        const lon = Number.parseInt(lonInput.value, 10);
+        const current = app.getSphereSegments();
+        const nextLon = Number.isFinite(lon) ? lon : current.lon;
+        app.setSphereSegments(current.lat, nextLon);
+        lonInput.value = String(app.getSphereSegments().lon);
+      });
+      lonRow.appendChild(lonLabel);
+      lonRow.appendChild(lonInput);
+
+      segmentsGroup.appendChild(latRow);
+      segmentsGroup.appendChild(lonRow);
+
+      form.appendChild(speedGroup);
+      form.appendChild(directionGroup);
+      form.appendChild(planeGroup);
+      form.appendChild(shadingGroup);
+      form.appendChild(segmentsGroup);
+      details.appendChild(form);
+
+      list.appendChild(details);
     }
-
-    planeYG.input.checked = selected.plane === 'YG';
-    planeGB.input.checked = selected.plane === 'GB';
-    planeYB.input.checked = selected.plane === 'YB';
   };
 
   const unsubscribe = app.onSimChange(() => {
-    updateUI();
+    renderObjects();
   });
 
-  updateUI();
+  renderObjects();
 
   container.addEventListener('DOMNodeRemoved', () => {
     unsubscribe();

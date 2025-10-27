@@ -1,7 +1,7 @@
 // sim.ts — builds the Simulation tab UI for starting/stopping and tuning speed
 import { App } from '../app/App';
 
-export function createSimTab(app: App, openPropertiesTab: () => void): HTMLElement {
+export function createSimTab(app: App): HTMLElement {
   const container = document.createElement('div');
   container.className = 'sim-tab';
 
@@ -45,17 +45,8 @@ export function createSimTab(app: App, openPropertiesTab: () => void): HTMLEleme
   speedGroup.appendChild(slider);
   speedGroup.appendChild(speedValue);
 
-  const objectListLabel = document.createElement('div');
-  objectListLabel.className = 'sim-objects-label';
-  objectListLabel.textContent = 'Sim Objects';
-
-  const objectList = document.createElement('ul');
-  objectList.className = 'sim-objects-list';
-
   container.appendChild(controls);
   container.appendChild(speedGroup);
-  container.appendChild(objectListLabel);
-  container.appendChild(objectList);
 
   const updateUI = () => {
     const running = app.isSimulationRunning();
@@ -65,23 +56,6 @@ export function createSimTab(app: App, openPropertiesTab: () => void): HTMLEleme
     speedValue.textContent = `${speed} beats/sec`;
     if (String(speed) !== slider.value) {
       slider.value = String(speed);
-    }
-  };
-
-  const refreshObjectList = () => {
-    objectList.innerHTML = '';
-    const selectedId = app.getSelectedSimObject()?.id ?? null;
-    for (const simObject of app.getSimObjects()) {
-      const item = document.createElement('li');
-      item.textContent = simObject.id;
-      if (simObject.id === selectedId) {
-        item.classList.add('is-selected');
-      }
-      item.addEventListener('click', () => {
-        app.selectSimObject(simObject.id);
-        openPropertiesTab();
-      });
-      objectList.appendChild(item);
     }
   };
 
@@ -103,11 +77,9 @@ export function createSimTab(app: App, openPropertiesTab: () => void): HTMLEleme
 
   const unsubscribe = app.onSimChange(() => {
     updateUI();
-    refreshObjectList();
   });
 
   updateUI();
-  refreshObjectList();
 
   container.addEventListener('DOMNodeRemoved', () => {
     unsubscribe();

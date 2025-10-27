@@ -32,7 +32,7 @@ panel.addTab({
 panel.addTab({
   id: 'sim',
   label: 'Sim',
-  render: () => createSimTab(app, () => panel.setActiveTab('properties')),
+  render: () => createSimTab(app),
 });
 
 panel.addTab({
