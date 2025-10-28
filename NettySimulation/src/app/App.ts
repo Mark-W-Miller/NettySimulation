@@ -36,7 +36,9 @@ export class App {
   private program: SphereProgram | null = null;
   private sphere: SphereMesh | null = null;
   private axes: AxisSet | null = null;
+  private rotatedAxes: AxisSet | null = null;
   private axisVisibility: Record<'x' | 'y' | 'z', boolean> = { x: true, y: true, z: true };
+  private showSecondaryAxes = true;
   private sphereSegments = { lat: 48, lon: 48 };
   private shadingIntensity = 0.4;
 
@@ -45,6 +47,8 @@ export class App {
   private readonly identityNormalMatrix = mat3Identity();
   private readonly alignYAxisToZMatrix = mat4FromXRotation(-Math.PI / 2);
   private readonly alignYAxisToXMatrix = mat4FromZRotation(-Math.PI / 2);
+  private readonly rotatedAxisModelMatrix: Float32Array;
+  private readonly rotatedAxisNormalMatrix: Float32Array;
   private viewMatrix = mat4Identity();
   private projectionMatrix = mat4Identity();
 
@@ -60,6 +64,13 @@ export class App {
   private sphereObject: SimObject | null = null;
   private selectedObjectId: string | null = null;
   private readonly simListeners = new Set<() => void>();
+
+  constructor() {
+    const rotateY = mat4FromYRotation(Math.PI / 4);
+    const rotateX = mat4FromXRotation(Math.PI / 4);
+    this.rotatedAxisModelMatrix = mat4Multiply(rotateX, rotateY);
+    this.rotatedAxisNormalMatrix = mat3FromMat4(this.rotatedAxisModelMatrix);
+  }
 
   mount(host: HTMLElement): void {
     this.dispose();
@@ -81,12 +92,14 @@ export class App {
     const program = Assets.createSphereProgram(gl);
     const sphere = Assets.createSphereMesh(gl, this.sphereSegments.lat, this.sphereSegments.lon);
     const axes = Assets.createAxisSet(gl);
+    const rotatedAxes = Assets.createAxisSet(gl);
 
     this.canvas = canvas;
     this.gl = gl;
     this.program = program;
     this.sphere = sphere;
     this.axes = axes;
+    this.rotatedAxes = rotatedAxes;
 
     this.sphereObject = {
       id: 'sphere',
@@ -142,6 +155,10 @@ export class App {
       Assets.disposeAxisSet(this.gl, this.axes);
     }
 
+    if (this.gl && this.rotatedAxes) {
+      Assets.disposeAxisSet(this.gl, this.rotatedAxes);
+    }
+
     if (this.gl) {
       Assets.disposeSphereProgram(this.gl, this.program);
     }
@@ -151,6 +168,7 @@ export class App {
     this.program = null;
     this.sphere = null;
     this.axes = null;
+    this.rotatedAxes = null;
     this.simObjects.length = 0;
     this.sphereObject = null;
     this.simRunning = false;
@@ -197,7 +215,9 @@ export class App {
     const clipRadius = 1.02;
     const cameraDistanceFromCenter = Math.hypot(position[0], position[1], position[2]);
     const anyAxisVisible = this.axisVisibility.x || this.axisVisibility.y || this.axisVisibility.z;
-    const shouldRenderAxes = anyAxisVisible && Boolean(this.axes);
+    const shouldRenderPrimaryAxes = Boolean(this.axes) && anyAxisVisible;
+    const shouldRenderSecondaryAxes = Boolean(this.rotatedAxes) && anyAxisVisible && this.showSecondaryAxes;
+    const shouldRenderAxes = shouldRenderPrimaryAxes || shouldRenderSecondaryAxes;
     const clipEnabled = shouldRenderAxes && cameraDistanceFromCenter > clipRadius + 0.05;
 
     // Build the camera view transform.
@@ -226,68 +246,64 @@ export class App {
     }
 
     // Draw axes
-    if (shouldRenderAxes && this.axes) {
-      const axisEntries: Array<['x' | 'y' | 'z', AxisMesh]> = [
-        ['x', this.axes.x],
-        ['y', this.axes.y],
-        ['z', this.axes.z],
-      ];
-
-      for (const [axisKey, mesh] of axisEntries) {
-        if (!this.axisVisibility[axisKey]) {
-          continue;
-        }
-
-        // Upload identity transforms for static axes.
-        gl.uniformMatrix4fv(program.uniformModel, false, this.identityModelMatrix);
-        gl.uniformMatrix3fv(program.uniformNormalMatrix, false, this.identityNormalMatrix);
-
-        // Bind axis vertex positions.
-        gl.bindBuffer(gl.ARRAY_BUFFER, mesh.positionBuffer);
-        // Describe position layout.
-        gl.vertexAttribPointer(program.attribPosition, 3, gl.FLOAT, false, 0, 0);
-        // Enable the position attribute.
-        gl.enableVertexAttribArray(program.attribPosition);
-
-        // Bind axis normals for lighting.
-        gl.bindBuffer(gl.ARRAY_BUFFER, mesh.normalBuffer);
-        // Describe normal layout.
-        gl.vertexAttribPointer(program.attribNormal, 3, gl.FLOAT, false, 0, 0);
-        // Enable the normal attribute.
-        gl.enableVertexAttribArray(program.attribNormal);
-
-        // Bind axis vertex colors.
-        gl.bindBuffer(gl.ARRAY_BUFFER, mesh.colorBuffer);
-        // Describe color layout.
-        gl.vertexAttribPointer(program.attribColor, 3, gl.FLOAT, false, 0, 0);
-        // Enable the color attribute.
-        gl.enableVertexAttribArray(program.attribColor);
-
-        // Bind axis indices.
-        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, mesh.indexBuffer);
-        // Render all faces of the axis cylinders.
-        gl.disable(gl.CULL_FACE);
-        // Offset depth values to avoid z-fighting with the sphere.
-        gl.enable(gl.POLYGON_OFFSET_FILL);
-        // Apply the polygon offset parameters.
-        gl.polygonOffset(1.0, 1.0);
-        // Instruct shader to use per-vertex colors and reset gradient shading.
-        gl.uniform1f(program.uniformUseVertexColor, 1.0);
-        gl.uniform1f(program.uniformShadingIntensity, 0.0);
-        gl.uniform3f(program.uniformPlaneVector, 0.0, 0.0, 0.0);
-        // Clip beams when outside sphere.
-        gl.uniform1f(program.uniformClipEnabled, clipEnabled ? 1.0 : 0.0);
-        // Center the clipping sphere at the origin.
-        gl.uniform3f(program.uniformClipCenter, 0.0, 0.0, 0.0);
-        // Use the precomputed clip radius.
-        gl.uniform1f(program.uniformClipRadius, clipRadius);
-        // Draw the axis cylinder.
-        gl.drawElements(gl.TRIANGLES, mesh.indexCount, gl.UNSIGNED_SHORT, 0);
-        // Restore default depth behavior.
-        gl.disable(gl.POLYGON_OFFSET_FILL);
-        // Reinstate face culling for future draws.
-        gl.enable(gl.CULL_FACE);
+    if (shouldRenderAxes) {
+      if (shouldRenderPrimaryAxes && this.axes) {
+        this.drawAxisSet(gl, program, this.axes, this.identityModelMatrix, this.identityNormalMatrix, clipEnabled, clipRadius);
       }
+      if (shouldRenderSecondaryAxes && this.rotatedAxes) {
+        this.drawAxisSet(gl, program, this.rotatedAxes, this.rotatedAxisModelMatrix, this.rotatedAxisNormalMatrix, clipEnabled, clipRadius);
+      }
+    }
+  }
+
+  private drawAxisSet(
+    gl: WebGLRenderingContext,
+    program: SphereProgram,
+    axisSet: AxisSet,
+    modelMatrix: Float32Array,
+    normalMatrix: Float32Array,
+    clipEnabled: boolean,
+    clipRadius: number,
+  ): void {
+    const axisEntries: Array<['x' | 'y' | 'z', AxisMesh]> = [
+      ['x', axisSet.x],
+      ['y', axisSet.y],
+      ['z', axisSet.z],
+    ];
+
+    for (const [axisKey, mesh] of axisEntries) {
+      if (!this.axisVisibility[axisKey]) {
+        continue;
+      }
+
+      gl.uniformMatrix4fv(program.uniformModel, false, modelMatrix);
+      gl.uniformMatrix3fv(program.uniformNormalMatrix, false, normalMatrix);
+
+      gl.bindBuffer(gl.ARRAY_BUFFER, mesh.positionBuffer);
+      gl.vertexAttribPointer(program.attribPosition, 3, gl.FLOAT, false, 0, 0);
+      gl.enableVertexAttribArray(program.attribPosition);
+
+      gl.bindBuffer(gl.ARRAY_BUFFER, mesh.normalBuffer);
+      gl.vertexAttribPointer(program.attribNormal, 3, gl.FLOAT, false, 0, 0);
+      gl.enableVertexAttribArray(program.attribNormal);
+
+      gl.bindBuffer(gl.ARRAY_BUFFER, mesh.colorBuffer);
+      gl.vertexAttribPointer(program.attribColor, 3, gl.FLOAT, false, 0, 0);
+      gl.enableVertexAttribArray(program.attribColor);
+
+      gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, mesh.indexBuffer);
+      gl.disable(gl.CULL_FACE);
+      gl.enable(gl.POLYGON_OFFSET_FILL);
+      gl.polygonOffset(1.0, 1.0);
+      gl.uniform1f(program.uniformUseVertexColor, 1.0);
+      gl.uniform1f(program.uniformShadingIntensity, 0.0);
+      gl.uniform3f(program.uniformPlaneVector, 0.0, 0.0, 0.0);
+      gl.uniform1f(program.uniformClipEnabled, clipEnabled ? 1.0 : 0.0);
+      gl.uniform3f(program.uniformClipCenter, 0.0, 0.0, 0.0);
+      gl.uniform1f(program.uniformClipRadius, clipRadius);
+      gl.drawElements(gl.TRIANGLES, mesh.indexCount, gl.UNSIGNED_SHORT, 0);
+      gl.disable(gl.POLYGON_OFFSET_FILL);
+      gl.enable(gl.CULL_FACE);
     }
   }
 
@@ -432,6 +448,18 @@ export class App {
       return;
     }
     this.axisVisibility[axis] = visible;
+    this.notifySimChange();
+  }
+
+  getSecondaryAxesVisible(): boolean {
+    return this.showSecondaryAxes;
+  }
+
+  setSecondaryAxesVisible(visible: boolean): void {
+    if (this.showSecondaryAxes === visible) {
+      return;
+    }
+    this.showSecondaryAxes = visible;
     this.notifySimChange();
   }
 

@@ -22,6 +22,18 @@ export function createDisplayTab(app: App): HTMLElement {
     z: document.createElement('input'),
   } as Record<AxisKey, HTMLInputElement>;
 
+  const secondaryAxesRow = document.createElement('label');
+  secondaryAxesRow.className = 'tab-panel__checkbox';
+  const secondaryCheckbox = document.createElement('input');
+  secondaryCheckbox.type = 'checkbox';
+  secondaryCheckbox.addEventListener('change', () => {
+    app.setSecondaryAxesVisible(secondaryCheckbox.checked);
+  });
+  const secondaryLabel = document.createElement('span');
+  secondaryLabel.textContent = 'Show Secondary Axes';
+  secondaryAxesRow.appendChild(secondaryCheckbox);
+  secondaryAxesRow.appendChild(secondaryLabel);
+
   (['x', 'y', 'z'] as AxisKey[]).forEach((axis) => {
     const row = document.createElement('label');
     row.className = 'tab-panel__checkbox';
@@ -41,12 +53,14 @@ export function createDisplayTab(app: App): HTMLElement {
   });
 
   container.appendChild(axisGroup);
+  container.appendChild(secondaryAxesRow);
 
   const updateUI = () => {
     const visibility = app.getAxisVisibility();
     (['x', 'y', 'z'] as AxisKey[]).forEach((axis) => {
       checkboxes[axis].checked = visibility[axis];
     });
+    secondaryCheckbox.checked = app.getSecondaryAxesVisible();
   };
 
   const unsubscribe = app.onSimChange(() => {
