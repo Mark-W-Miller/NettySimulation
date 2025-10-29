@@ -48,6 +48,16 @@ export function createSimTab(app: App): HTMLElement {
   container.appendChild(controls);
   container.appendChild(speedGroup);
 
+  const segmentLabel = document.createElement('div');
+  segmentLabel.className = 'sim-objects-label';
+  segmentLabel.textContent = 'Simulation Segments';
+
+  const segmentList = document.createElement('ul');
+  segmentList.className = 'sim-objects-list';
+
+  container.appendChild(segmentLabel);
+  container.appendChild(segmentList);
+
   const updateUI = () => {
     const running = app.isSimulationRunning();
     startButton.disabled = running;
@@ -56,6 +66,23 @@ export function createSimTab(app: App): HTMLElement {
     speedValue.textContent = `${speed} beats/sec`;
     if (String(speed) !== slider.value) {
       slider.value = String(speed);
+    }
+  };
+
+  const refreshSegmentList = () => {
+    segmentList.innerHTML = '';
+    const segments = app.getSimulationSegments();
+    const selectedSegment = app.getSelectedSimulationSegmentId();
+    for (const segment of segments) {
+      const item = document.createElement('li');
+      item.textContent = segment.name;
+      if (segment.id === selectedSegment) {
+        item.classList.add('is-selected');
+      }
+      item.addEventListener('click', () => {
+        app.selectSimulationSegment(segment.id);
+      });
+      segmentList.appendChild(item);
     }
   };
 
@@ -77,9 +104,11 @@ export function createSimTab(app: App): HTMLElement {
 
   const unsubscribe = app.onSimChange(() => {
     updateUI();
+    refreshSegmentList();
   });
 
   updateUI();
+  refreshSegmentList();
 
   container.addEventListener('DOMNodeRemoved', () => {
     unsubscribe();

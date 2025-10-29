@@ -96,6 +96,15 @@ export function mat4FromZRotation(angle: number): Float32Array {
   ]);
 }
 
+export function mat4ScaleUniform(scale: number): Float32Array {
+  return new Float32Array([
+    scale, 0, 0, 0,
+    0, scale, 0, 0,
+    0, 0, scale, 0,
+    0, 0, 0, 1,
+  ]);
+}
+
 export function mat4Multiply(a: Float32Array, b: Float32Array): Float32Array {
   const out = new Float32Array(16);
 

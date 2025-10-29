@@ -38,6 +38,8 @@ export interface SphereDrawParams {
   normalMatrix: Float32Array;
   shadingIntensity: number;
   planeVector: Float32Array;
+  baseColor: Float32Array;
+  vertexColorWeight: number;
 }
 
 export function createSphereMesh(
@@ -266,7 +268,8 @@ export function drawSphere(
   gl.uniformMatrix3fv(sphereProgram.uniformNormalMatrix, false, params.normalMatrix);
   gl.uniform1f(sphereProgram.uniformShadingIntensity, params.shadingIntensity);
   gl.uniform3fv(sphereProgram.uniformPlaneVector, params.planeVector);
-  gl.uniform1f(sphereProgram.uniformUseVertexColor, 1.0);
+  gl.uniform3fv(sphereProgram.uniformColor, params.baseColor);
+  gl.uniform1f(sphereProgram.uniformUseVertexColor, clamp01(params.vertexColorWeight));
   gl.uniform1f(sphereProgram.uniformClipEnabled, 0.0);
 
   gl.bindBuffer(gl.ARRAY_BUFFER, mesh.positionBuffer);
@@ -285,6 +288,16 @@ export function drawSphere(
   gl.disable(gl.CULL_FACE);
   gl.drawElements(gl.TRIANGLES, mesh.indexCount, gl.UNSIGNED_SHORT, 0);
   gl.enable(gl.CULL_FACE);
+}
+
+function clamp01(value: number): number {
+  if (value < 0) {
+    return 0;
+  }
+  if (value > 1) {
+    return 1;
+  }
+  return value;
 }
 
 function buildSphereGeometry(latitudeBands: number, longitudeBands: number) {

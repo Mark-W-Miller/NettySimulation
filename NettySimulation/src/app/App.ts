@@ -18,8 +18,19 @@ import {
   mat4LookAt,
   mat4Perspective,
   mat4Multiply,
+  mat4ScaleUniform,
   normalizeVec3,
 } from './math3d';
+
+type BaseColor =
+  | 'crimson'
+  | 'amber'
+  | 'gold'
+  | 'lime'
+  | 'teal'
+  | 'azure'
+  | 'violet'
+  | 'magenta';
 
 interface SimObject {
   id: string;
@@ -28,6 +39,26 @@ interface SimObject {
   speedPerTick: number;
   direction: 1 | -1;
   plane: 'YG' | 'GB' | 'YB';
+  shellSize: number;
+  baseColor: BaseColor;
+  visible: boolean;
+}
+
+interface SimObjectDefinition {
+  id: string;
+  speedPerTick: number;
+  direction: 1 | -1;
+  plane: 'YG' | 'GB' | 'YB';
+  shellSize: number;
+  baseColor: BaseColor;
+  visible?: boolean;
+  initialRotationY?: number;
+}
+
+interface SimulationSegmentDefinition {
+  id: string;
+  name: string;
+  objects: SimObjectDefinition[];
 }
 
 export class App {
@@ -49,6 +80,17 @@ export class App {
   private readonly alignYAxisToXMatrix = mat4FromZRotation(-Math.PI / 2);
   private readonly rotatedAxisModelMatrix: Float32Array;
   private readonly rotatedAxisNormalMatrix: Float32Array;
+  private readonly defaultShellSize = 32;
+  private readonly baseColorVectors: Record<BaseColor, Float32Array> = {
+    crimson: new Float32Array([0.86, 0.19, 0.29]),
+    amber: new Float32Array([1.0, 0.75, 0.27]),
+    gold: new Float32Array([0.98, 0.86, 0.29]),
+    lime: new Float32Array([0.54, 0.86, 0.27]),
+    teal: new Float32Array([0.1, 0.65, 0.64]),
+    azure: new Float32Array([0.2, 0.55, 0.96]),
+    violet: new Float32Array([0.55, 0.34, 0.84]),
+    magenta: new Float32Array([0.78, 0.16, 0.76]),
+  };
   private viewMatrix = mat4Identity();
   private projectionMatrix = mat4Identity();
 
@@ -61,8 +103,35 @@ export class App {
   private simSpeed = 30;
   private readonly rotationPerBeat = Math.PI / 90;
   private readonly simObjects: SimObject[] = [];
-  private sphereObject: SimObject | null = null;
   private selectedObjectId: string | null = null;
+  private readonly segmentDefinitions: SimulationSegmentDefinition[] = [
+    {
+      id: 'rgp',
+      name: 'RGP Simulation',
+      objects: [
+        {
+          id: 'sphere-primary',
+          speedPerTick: 1,
+          direction: 1,
+          plane: 'YG',
+          shellSize: 32,
+          baseColor: 'azure',
+          visible: true,
+        },
+        {
+          id: 'sphere-secondary',
+          speedPerTick: 0.75,
+          direction: -1,
+          plane: 'GB',
+          shellSize: 24,
+          baseColor: 'crimson',
+          visible: true,
+          initialRotationY: Math.PI / 4,
+        },
+      ],
+    },
+  ];
+  private selectedSegmentId: string | null = null;
   private readonly simListeners = new Set<() => void>();
 
   constructor() {
@@ -101,17 +170,15 @@ export class App {
     this.axes = axes;
     this.rotatedAxes = rotatedAxes;
 
-    this.sphereObject = {
-      id: 'sphere',
-      mesh: sphere,
-      rotationY: 0,
-      speedPerTick: 1,
-      direction: 1,
-      plane: 'YG',
-    };
-    this.simObjects.push(this.sphereObject);
-    this.selectedObjectId = this.sphereObject.id;
-    this.notifySimChange();
+    const defaultSegment = this.segmentDefinitions[0];
+    if (defaultSegment) {
+      this.loadSegment(defaultSegment.id);
+    } else {
+      this.simObjects.length = 0;
+      this.selectedSegmentId = null;
+      this.selectedObjectId = null;
+      this.notifySimChange();
+    }
 
     this.resize(canvas, gl);
     this.resizeObserver = new ResizeObserver(() => {
@@ -170,9 +237,9 @@ export class App {
     this.axes = null;
     this.rotatedAxes = null;
     this.simObjects.length = 0;
-    this.sphereObject = null;
     this.simRunning = false;
     this.selectedObjectId = null;
+    this.selectedSegmentId = null;
     this.notifySimChange();
   }
 
@@ -232,6 +299,9 @@ export class App {
     });
 
     for (const simObject of this.simObjects) {
+      if (!simObject.visible) {
+        continue;
+      }
       if (beats > 0) {
         simObject.rotationY += beats * this.rotationPerBeat * simObject.speedPerTick * simObject.direction;
       }
@@ -242,6 +312,8 @@ export class App {
         normalMatrix,
         shadingIntensity: this.shadingIntensity,
         planeVector: this.getPlaneNormal(simObject.plane),
+        baseColor: this.getBaseColorVector(simObject.baseColor),
+        vertexColorWeight: 0.75,
       });
     }
 
@@ -254,6 +326,49 @@ export class App {
         this.drawAxisSet(gl, program, this.rotatedAxes, this.rotatedAxisModelMatrix, this.rotatedAxisNormalMatrix, clipEnabled, clipRadius);
       }
     }
+  }
+
+  private loadSegment(segmentId: string): void {
+    const segment = this.segmentDefinitions.find((definition) => definition.id === segmentId);
+    if (!segment) {
+      return;
+    }
+
+    this.selectedSegmentId = segmentId;
+
+    if (!this.gl) {
+      return;
+    }
+
+    const mesh = this.ensureSphereMesh();
+
+    this.simObjects.length = 0;
+    for (const objectDef of segment.objects) {
+      this.simObjects.push({
+        id: objectDef.id,
+        mesh,
+        rotationY: objectDef.initialRotationY ?? 0,
+        speedPerTick: objectDef.speedPerTick,
+        direction: objectDef.direction,
+        plane: objectDef.plane,
+        shellSize: objectDef.shellSize ?? this.defaultShellSize,
+        baseColor: objectDef.baseColor ?? 'azure',
+        visible: objectDef.visible ?? true,
+      });
+    }
+
+    this.selectedObjectId = segment.objects[0]?.id ?? null;
+    this.notifySimChange();
+  }
+
+  private ensureSphereMesh(): SphereMesh {
+    if (!this.sphere) {
+      if (!this.gl) {
+        throw new Error('Sphere mesh requested before WebGL context initialized.');
+      }
+      this.sphere = Assets.createSphereMesh(this.gl, this.sphereSegments.lat, this.sphereSegments.lon);
+    }
+    return this.sphere;
   }
 
   private drawAxisSet(
@@ -342,6 +457,21 @@ export class App {
     return [...this.simObjects];
   }
 
+  getSimulationSegments(): ReadonlyArray<{ id: string; name: string }> {
+    return this.segmentDefinitions.map(({ id, name }) => ({ id, name }));
+  }
+
+  getSelectedSimulationSegmentId(): string | null {
+    return this.selectedSegmentId;
+  }
+
+  selectSimulationSegment(id: string): void {
+    if (this.selectedSegmentId === id) {
+      return;
+    }
+    this.loadSegment(id);
+  }
+
   onSimChange(listener: () => void): () => void {
     this.simListeners.add(listener);
     return () => {
@@ -364,7 +494,9 @@ export class App {
     return this.simObjects.find((object) => object.id === this.selectedObjectId) ?? null;
   }
 
-  updateSelectedSimObject(update: Partial<Pick<SimObject, 'speedPerTick' | 'direction' | 'plane'>>): void {
+  updateSelectedSimObject(
+    update: Partial<Pick<SimObject, 'speedPerTick' | 'direction' | 'plane' | 'shellSize' | 'baseColor' | 'visible'>>,
+  ): void {
     const selected = this.getSelectedSimObject();
     if (!selected) {
       return;
@@ -380,6 +512,18 @@ export class App {
 
     if (update.plane) {
       selected.plane = update.plane;
+    }
+
+    if (typeof update.shellSize === 'number' && Number.isFinite(update.shellSize)) {
+      selected.shellSize = Math.max(1, Math.floor(update.shellSize));
+    }
+
+    if (update.baseColor) {
+      selected.baseColor = update.baseColor;
+    }
+
+    if (typeof update.visible === 'boolean') {
+      selected.visible = update.visible;
     }
 
     this.notifySimChange();
@@ -414,11 +558,14 @@ export class App {
         break;
     }
 
-    const modelMatrix = mat4Multiply(rotationMatrix, alignmentMatrix);
+    const rotationAndAlignment = mat4Multiply(rotationMatrix, alignmentMatrix);
+    const scaleFactor = Math.max(0.01, simObject.shellSize / this.defaultShellSize);
+    const scaleMatrix = mat4ScaleUniform(scaleFactor);
+    const modelMatrix = mat4Multiply(rotationAndAlignment, scaleMatrix);
 
     return {
       modelMatrix,
-      normalMatrix: mat3FromMat4(modelMatrix),
+      normalMatrix: mat3FromMat4(rotationAndAlignment),
     };
   }
 
@@ -433,6 +580,10 @@ export class App {
       default:
         return new Float32Array([1, 0, 0]);
     }
+  }
+
+  private getBaseColorVector(color: BaseColor): Float32Array {
+    return this.baseColorVectors[color];
   }
 
   getAxisVisibility(): Readonly<Record<'x' | 'y' | 'z', boolean>> {
@@ -481,8 +632,8 @@ export class App {
       const oldMesh = this.sphere;
       const newMesh = Assets.createSphereMesh(this.gl, clampedLat, clampedLon);
       this.sphere = newMesh;
-      if (this.sphereObject) {
-        this.sphereObject.mesh = newMesh;
+      for (const simObject of this.simObjects) {
+        simObject.mesh = newMesh;
       }
       if (oldMesh) {
         Assets.disposeSphereMesh(this.gl, oldMesh);
