@@ -7,6 +7,12 @@ import {
   type SphereProgram,
   type TwirlMesh,
 } from '../engine/Assets';
+import {
+  type BaseColor,
+  type SphereObjectDefinition,
+  type TwirlObjectDefinition,
+  type SimObjectDefinition,
+} from '../engine/assets/simTypes';
 import { CameraController } from './camera';
 import {
   clamp,
@@ -23,18 +29,6 @@ import {
   mat4ScaleUniform,
   normalizeVec3,
 } from './math3d';
-
-type BaseColor =
-  | 'crimson'
-  | 'red'
-  | 'amber'
-  | 'gold'
-  | 'lime'
-  | 'teal'
-  | 'azure'
-  | 'violet'
-  | 'magenta'
-  | 'white';
 
 interface BaseSimObject {
   id: string;
@@ -67,38 +61,6 @@ interface TwirlObject extends BaseSimObject {
 }
 
 type SimObject = SphereObject | TwirlObject;
-
-interface SphereObjectDefinition {
-  type: 'sphere';
-  id: string;
-  speedPerTick: number;
-  direction: 1 | -1;
-  plane: 'YG' | 'GB' | 'YB';
-  shellSize: number;
-  baseColor: BaseColor;
-  visible?: boolean;
-  shadingIntensity?: number;
-  opacity?: number;
-  initialRotationY?: number;
-}
-
-interface TwirlObjectDefinition {
-  type: 'twirl';
-  id: string;
-  speedPerTick: number;
-  direction: 1 | -1;
-  plane: 'YG' | 'GB' | 'YB';
-  shellSize: number;
-  baseColor: BaseColor;
-  visible?: boolean;
-  shadingIntensity?: number;
-  opacity?: number;
-  beltHalfAngle: number;
-  pulseSpeed: number;
-  initialRotationY?: number;
-}
-
-type SimObjectDefinition = SphereObjectDefinition | TwirlObjectDefinition;
 
 interface SimulationSegmentDefinition {
   id: string;
@@ -770,8 +732,7 @@ export class App {
 
   private getBaseColorVector(color: BaseColor, opacity: number): Float32Array {
     const base = this.baseColorVectors[color];
-    const alphaModifier = color === 'white' ? 0.45 : 1;
-    return new Float32Array([base[0], base[1], base[2], clamp(opacity * alphaModifier, 0, 1)]);
+    return new Float32Array([base[0], base[1], base[2], clamp(opacity, 0, 1)]);
   }
 
   getAxisVisibility(): Readonly<Record<'x' | 'y' | 'z', boolean>> {
