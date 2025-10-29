@@ -240,7 +240,7 @@ export function createPropertiesTab(app: App): HTMLElement {
         const value = Number.parseFloat(beltInput!.value);
         const clamped = Number.isFinite(value) ? Math.min(Math.max(value, 0.01), Math.PI / 2) : simObject.beltHalfAngle;
         beltInput!.value = clamped.toFixed(2);
-        applyUpdate({ beltHalfAngle: clamped });
+        applyUpdate({ beltHalfAngle: clamped } as ObjectUpdate);
       });
       beltGroup.appendChild(beltLabel);
       beltGroup.appendChild(beltInput);
@@ -262,7 +262,7 @@ export function createPropertiesTab(app: App): HTMLElement {
         const value = Number.parseFloat(pulseInput!.value);
         const clamped = Number.isFinite(value) ? Math.max(0, value) : simObject.pulseSpeed;
         pulseInput!.value = clamped.toFixed(2);
-        applyUpdate({ pulseSpeed: clamped });
+        applyUpdate({ pulseSpeed: clamped } as ObjectUpdate);
       });
       pulseGroup.appendChild(pulseLabel);
       pulseGroup.appendChild(pulseInput);

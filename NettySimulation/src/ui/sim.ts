@@ -1,7 +1,7 @@
 // sim.ts — builds the Simulation tab UI for starting/stopping and tuning speed
 import { App } from '../app/App';
 
-export function createSimTab(app: App): HTMLElement {
+export function createSimTab(app: App, openPropertiesTab: () => void): HTMLElement {
   const container = document.createElement('div');
   container.className = 'sim-tab';
 
@@ -80,12 +80,38 @@ export function createSimTab(app: App): HTMLElement {
         item.classList.add('is-selected');
       }
       item.addEventListener('click', () => {
-        app.selectSimulationSegment(segment.id);
+        if (segment.id !== app.getSelectedSimulationSegmentId()) {
+          app.selectSimulationSegment(segment.id);
+          const url = new URL(window.location.href);
+          url.hash = `segment=${segment.id}`;
+          history.pushState({ segment: segment.id }, '', url.toString());
+        }
+        openPropertiesTab();
       });
       segmentList.appendChild(item);
     }
+
+    if (selectedSegment) {
+      const url = new URL(window.location.href);
+      url.hash = `segment=${selectedSegment}`;
+      history.replaceState({ segment: selectedSegment }, '', url.toString());
+    }
   };
 
+  const lastSegment = window.location.hash.match(/#segment=(.+)$/)?.[1];
+  if (lastSegment) {
+    app.selectSimulationSegment(lastSegment);
+    openPropertiesTab();
+  }
+
+  const handlePopState = (event: PopStateEvent) => {
+    const hashSegment = window.location.hash.match(/#segment=(.+)$/)?.[1];
+    if (hashSegment && hashSegment !== app.getSelectedSimulationSegmentId()) {
+      app.selectSimulationSegment(hashSegment);
+      openPropertiesTab();
+    }
+  };
+  window.addEventListener('popstate', handlePopState);
   startButton.addEventListener('click', () => {
     app.startSimulation();
     updateUI();
@@ -112,6 +138,7 @@ export function createSimTab(app: App): HTMLElement {
 
   container.addEventListener('DOMNodeRemoved', () => {
     unsubscribe();
+    window.removeEventListener('popstate', handlePopState);
   });
 
   return container;
