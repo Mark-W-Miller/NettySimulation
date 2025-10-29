@@ -182,7 +182,7 @@ export function createSphereProgram(gl: WebGLRenderingContext): SphereProgram {
       float alpha = clamp(1.0 - uOpacityIntensity * opacityBand, 0.0, 1.0) * vAlpha;
 
       vec3 shaded = baseColor * brightness;
-      gl_FragColor = vec4(clamp(shaded, 0.0, 1.0), alpha);
+      gl_FragColor = vec4(clamp(shaded, 0.0, 1.0), 1.0);
     }
   `;
 
@@ -225,7 +225,7 @@ export function createSphereProgram(gl: WebGLRenderingContext): SphereProgram {
   const uniformClipRadius = getRequiredUniform(gl, program, 'uClipRadius');
   const uniformShadingIntensity = getRequiredUniform(gl, program, 'uShadingIntensity');
   const uniformPlaneVector = getRequiredUniform(gl, program, 'uPlaneVector');
-  const uniformOpacityIntensity = getRequiredUniform(gl, program, 'uOpacityIntensity');
+  const uniformOpacityIntensity = gl.getUniformLocation(program, 'uOpacityIntensity');
 
   return {
     program,

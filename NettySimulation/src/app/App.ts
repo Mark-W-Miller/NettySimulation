@@ -380,8 +380,6 @@ export class App {
         simObject.pulseScale = 0.25 + 0.75 * triangle;
       }
 
-      gl.depthMask(simObject.type !== 'twirl');
-
       const { modelMatrix, normalMatrix } = this.computeModelMatrices(simObject);
       Assets.drawSphere(gl, program, simObject.mesh, {
         modelMatrix,
@@ -394,7 +392,6 @@ export class App {
       });
     }
 
-    gl.depthMask(true);
     gl.disable(gl.BLEND);
 
     // Draw axes
