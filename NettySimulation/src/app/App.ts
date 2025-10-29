@@ -690,6 +690,7 @@ export class App {
       this.notifySimChange();
     } else if (this.shadingIntensity !== clamped) {
       this.shadingIntensity = clamped;
+      this.notifySimChange();
     }
   }
 

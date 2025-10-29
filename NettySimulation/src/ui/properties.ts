@@ -266,7 +266,7 @@ export function createPropertiesTab(app: App): HTMLElement {
       const clamped = Number.isFinite(value) ? Math.min(Math.max(value, 0), 1) : fallback;
       shadingSlider.value = clamped.toString();
       shadingValue.textContent = clamped.toFixed(2);
-      applyUpdate({ shadingIntensity: clamped });
+      app.selectSimObject(simObject.id);
       app.setShadingIntensity(clamped);
     });
     shadingGroup.appendChild(shadingLabel);
