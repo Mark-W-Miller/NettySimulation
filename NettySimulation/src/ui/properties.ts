@@ -49,6 +49,8 @@ export function createPropertiesTab(app: App): HTMLElement {
     baseColorSelect: HTMLSelectElement;
     shadingSlider: HTMLInputElement;
     shadingValue: HTMLSpanElement;
+    opacitySlider: HTMLInputElement;
+    opacityValue: HTMLSpanElement;
     latInput: HTMLInputElement;
     lonInput: HTMLInputElement;
   };
@@ -80,6 +82,7 @@ export function createPropertiesTab(app: App): HTMLElement {
     visibilityRow.className = 'properties-radio';
     const visibilityCheckbox = document.createElement('input');
     visibilityCheckbox.type = 'checkbox';
+    visibilityCheckbox.checked = simObject.visible;
     visibilityCheckbox.addEventListener('change', () => {
       applyUpdate({ visible: visibilityCheckbox.checked });
     });
@@ -100,6 +103,8 @@ export function createPropertiesTab(app: App): HTMLElement {
     speedInput.min = '0.1';
     speedInput.step = '0.1';
     speedInput.className = 'properties-number';
+    speedInput.value = simObject.speedPerTick.toFixed(2);
+    speedInput.dataset.prev = speedInput.value;
     speedInput.addEventListener('change', () => {
       const value = Number.parseFloat(speedInput.value);
       if (!Number.isFinite(value)) {
@@ -175,6 +180,8 @@ export function createPropertiesTab(app: App): HTMLElement {
     shellInput.min = '1';
     shellInput.step = '1';
     shellInput.className = 'properties-number properties-number--compact';
+    shellInput.value = String(simObject.shellSize);
+    shellInput.dataset.prev = shellInput.value;
     shellInput.addEventListener('change', () => {
       const size = Number.parseInt(shellInput.value, 10);
       const previous = Number.parseInt(shellInput.dataset.prev ?? '1', 10);
@@ -201,11 +208,39 @@ export function createPropertiesTab(app: App): HTMLElement {
       opt.textContent = option.label;
       baseColorSelect.appendChild(opt);
     });
+    baseColorSelect.value = simObject.baseColor;
     baseColorSelect.addEventListener('change', () => {
       applyUpdate({ baseColor: baseColorSelect.value as ObjectUpdate['baseColor'] });
     });
     baseColorGroup.appendChild(baseColorLabel);
     baseColorGroup.appendChild(baseColorSelect);
+
+    const opacityGroup = document.createElement('div');
+    opacityGroup.className = 'properties-group';
+    const opacityLabel = document.createElement('label');
+    opacityLabel.className = 'properties-label';
+    opacityLabel.textContent = 'Opacity Gradient';
+    opacityLabel.htmlFor = `properties-opacity-${simObject.id}`;
+    const opacitySlider = document.createElement('input');
+    opacitySlider.type = 'range';
+    opacitySlider.id = `properties-opacity-${simObject.id}`;
+    opacitySlider.min = '0';
+    opacitySlider.max = '1';
+    opacitySlider.step = '0.05';
+    opacitySlider.className = 'sim-speed-slider';
+    opacitySlider.value = simObject.opacity.toString();
+    const opacityValue = document.createElement('span');
+    opacityValue.className = 'properties-shading-value';
+    opacityValue.textContent = simObject.opacity.toFixed(2);
+    opacitySlider.addEventListener('input', () => {
+      const value = Number.parseFloat(opacitySlider.value);
+      const clamped = Number.isFinite(value) ? value : simObject.opacity;
+      opacityValue.textContent = clamped.toFixed(2);
+      applyUpdate({ opacity: clamped });
+    });
+    opacityGroup.appendChild(opacityLabel);
+    opacityGroup.appendChild(opacitySlider);
+    opacityGroup.appendChild(opacityValue);
 
     const shadingGroup = document.createElement('div');
     shadingGroup.className = 'properties-group';
@@ -222,11 +257,17 @@ export function createPropertiesTab(app: App): HTMLElement {
     shadingSlider.className = 'sim-speed-slider';
     const shadingValue = document.createElement('span');
     shadingValue.className = 'properties-shading-value';
+    const initialShading = simObject.shadingIntensity ?? app.getShadingIntensity();
+    shadingSlider.value = initialShading.toString();
+    shadingValue.textContent = initialShading.toFixed(2);
     shadingSlider.addEventListener('input', () => {
       const value = Number.parseFloat(shadingSlider.value);
-      const clamped = Number.isFinite(value) ? value : app.getShadingIntensity();
-      app.setShadingIntensity(clamped);
+      const fallback = simObject.shadingIntensity ?? app.getShadingIntensity();
+      const clamped = Number.isFinite(value) ? Math.min(Math.max(value, 0), 1) : fallback;
+      shadingSlider.value = clamped.toString();
       shadingValue.textContent = clamped.toFixed(2);
+      applyUpdate({ shadingIntensity: clamped });
+      app.setShadingIntensity(clamped);
     });
     shadingGroup.appendChild(shadingLabel);
     shadingGroup.appendChild(shadingSlider);
@@ -294,6 +335,7 @@ export function createPropertiesTab(app: App): HTMLElement {
     form.appendChild(planeGroup);
     form.appendChild(shellGroup);
     form.appendChild(baseColorGroup);
+    form.appendChild(opacityGroup);
     form.appendChild(shadingGroup);
     form.appendChild(segmentsGroup);
     details.appendChild(form);
@@ -321,6 +363,8 @@ export function createPropertiesTab(app: App): HTMLElement {
       baseColorSelect,
       shadingSlider,
       shadingValue,
+      opacitySlider,
+      opacityValue,
       latInput,
       lonInput,
     };
@@ -330,7 +374,6 @@ export function createPropertiesTab(app: App): HTMLElement {
     controls: ObjectControls,
     simObject: SimObjectView,
     selectedId: string | null,
-    shading: number,
     segments: { lat: number; lon: number },
   ) => {
     const shouldOpen = openObjects.has(simObject.id);
@@ -357,8 +400,12 @@ export function createPropertiesTab(app: App): HTMLElement {
 
     controls.baseColorSelect.value = simObject.baseColor;
 
+    const shading = simObject.shadingIntensity ?? app.getShadingIntensity();
     controls.shadingSlider.value = shading.toString();
     controls.shadingValue.textContent = shading.toFixed(2);
+
+    controls.opacitySlider.value = simObject.opacity.toString();
+    controls.opacityValue.textContent = simObject.opacity.toFixed(2);
 
     controls.latInput.value = String(segments.lat);
     controls.lonInput.value = String(segments.lon);
@@ -366,7 +413,6 @@ export function createPropertiesTab(app: App): HTMLElement {
 
   const renderObjects = () => {
     const simObjects = app.getSimObjects();
-    const shading = app.getShadingIntensity();
     const segments = app.getSphereSegments();
     const selectedId = app.getSelectedSimObject()?.id ?? null;
     if (selectedId) {
@@ -399,7 +445,7 @@ export function createPropertiesTab(app: App): HTMLElement {
         controls = createObjectControls(simObject);
         objectControls.set(simObject.id, controls);
       }
-      updateObjectControls(controls, simObject, selectedId, shading, segments);
+      updateObjectControls(controls, simObject, selectedId, segments);
       list.appendChild(controls.details);
       remainingIds.delete(simObject.id);
     }

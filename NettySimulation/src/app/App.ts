@@ -42,6 +42,8 @@ interface SimObject {
   shellSize: number;
   baseColor: BaseColor;
   visible: boolean;
+  shadingIntensity: number;
+  opacity: number;
 }
 
 interface SimObjectDefinition {
@@ -52,6 +54,8 @@ interface SimObjectDefinition {
   shellSize: number;
   baseColor: BaseColor;
   visible?: boolean;
+  shadingIntensity?: number;
+  opacity?: number;
   initialRotationY?: number;
 }
 
@@ -117,6 +121,8 @@ export class App {
           shellSize: 32,
           baseColor: 'azure',
           visible: true,
+          shadingIntensity: 0.4,
+          opacity: 1,
         },
         {
           id: 'sphere-secondary',
@@ -126,6 +132,8 @@ export class App {
           shellSize: 24,
           baseColor: 'crimson',
           visible: true,
+          shadingIntensity: 0.55,
+          opacity: 0.85,
           initialRotationY: Math.PI / 4,
         },
       ],
@@ -298,6 +306,10 @@ export class App {
       lightDirection: normalizeVec3([0.5, 0.8, 0.4]),
     });
 
+    gl.enable(gl.BLEND);
+    gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+    gl.depthMask(false);
+
     for (const simObject of this.simObjects) {
       if (!simObject.visible) {
         continue;
@@ -310,12 +322,16 @@ export class App {
       Assets.drawSphere(gl, program, simObject.mesh, {
         modelMatrix,
         normalMatrix,
-        shadingIntensity: this.shadingIntensity,
+        shadingIntensity: simObject.shadingIntensity,
         planeVector: this.getPlaneNormal(simObject.plane),
-        baseColor: this.getBaseColorVector(simObject.baseColor),
+        baseColor: this.getBaseColorVector(simObject.baseColor, simObject.opacity),
         vertexColorWeight: 0.75,
+        opacityIntensity: simObject.opacity,
       });
     }
+
+    gl.depthMask(true);
+    gl.disable(gl.BLEND);
 
     // Draw axes
     if (shouldRenderAxes) {
@@ -354,6 +370,8 @@ export class App {
         shellSize: objectDef.shellSize ?? this.defaultShellSize,
         baseColor: objectDef.baseColor ?? 'azure',
         visible: objectDef.visible ?? true,
+        shadingIntensity: clamp(objectDef.shadingIntensity ?? this.shadingIntensity, 0, 1),
+        opacity: clamp(objectDef.opacity ?? 1, 0, 1),
       });
     }
 
@@ -495,7 +513,12 @@ export class App {
   }
 
   updateSelectedSimObject(
-    update: Partial<Pick<SimObject, 'speedPerTick' | 'direction' | 'plane' | 'shellSize' | 'baseColor' | 'visible'>>,
+    update: Partial<
+      Pick<
+        SimObject,
+        'speedPerTick' | 'direction' | 'plane' | 'shellSize' | 'baseColor' | 'visible' | 'shadingIntensity' | 'opacity'
+      >
+    >,
   ): void {
     const selected = this.getSelectedSimObject();
     if (!selected) {
@@ -524,6 +547,14 @@ export class App {
 
     if (typeof update.visible === 'boolean') {
       selected.visible = update.visible;
+    }
+
+    if (typeof update.shadingIntensity === 'number' && Number.isFinite(update.shadingIntensity)) {
+      selected.shadingIntensity = clamp(update.shadingIntensity, 0, 1);
+    }
+
+    if (typeof update.opacity === 'number' && Number.isFinite(update.opacity)) {
+      selected.opacity = clamp(update.opacity, 0, 1);
     }
 
     this.notifySimChange();
@@ -582,8 +613,9 @@ export class App {
     }
   }
 
-  private getBaseColorVector(color: BaseColor): Float32Array {
-    return this.baseColorVectors[color];
+  private getBaseColorVector(color: BaseColor, opacity: number): Float32Array {
+    const base = this.baseColorVectors[color];
+    return new Float32Array([base[0], base[1], base[2], clamp(opacity, 0, 1)]);
   }
 
   getAxisVisibility(): Readonly<Record<'x' | 'y' | 'z', boolean>> {
@@ -644,16 +676,21 @@ export class App {
   }
 
   getShadingIntensity(): number {
-    return this.shadingIntensity;
+    return this.getSelectedSimObject()?.shadingIntensity ?? this.shadingIntensity;
   }
 
   setShadingIntensity(intensity: number): void {
     const clamped = clamp(intensity, 0, 1);
-    if (clamped === this.shadingIntensity) {
-      return;
+    const selected = this.getSelectedSimObject();
+    if (selected) {
+      if (selected.shadingIntensity === clamped) {
+        return;
+      }
+      selected.shadingIntensity = clamped;
+      this.notifySimChange();
+    } else if (this.shadingIntensity !== clamped) {
+      this.shadingIntensity = clamped;
     }
-    this.shadingIntensity = clamped;
-    this.notifySimChange();
   }
 
 }
