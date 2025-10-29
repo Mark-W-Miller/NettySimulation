@@ -162,7 +162,8 @@ export class App {
           shadingIntensity: 0.35,
           opacity: 1,
           beltHalfAngle: 0.18,
-          pulseSpeed: 0.6,
+          pulseSpeed: 0.75,
+          initialRotationY: Math.PI / 6,
         },
         {
           type: 'twirl',
@@ -374,10 +375,10 @@ export class App {
       }
 
       if (this.simRunning && simObject.type === 'twirl') {
-        simObject.pulsePhase = (simObject.pulsePhase + deltaSeconds * simObject.pulseSpeed) % 1;
-        const phase = simObject.pulsePhase;
-        const triangle = phase < 0.5 ? phase * 2 : (1 - (phase - 0.5) * 2);
-        simObject.pulseScale = 0.25 + 0.75 * triangle;
+        simObject.pulsePhase = (simObject.pulsePhase + deltaSeconds * simObject.pulseSpeed * 0.25) % 1;
+        const triangle = simObject.pulsePhase < 0.5 ? simObject.pulsePhase * 2 : (1 - (simObject.pulsePhase - 0.5) * 2);
+        const baseTriangle = simObject.id === 'white-ring' ? 1 - triangle : triangle;
+        simObject.pulseScale = 0.25 + 0.75 * baseTriangle;
       }
 
       const { modelMatrix, normalMatrix } = this.computeModelMatrices(simObject);
@@ -437,7 +438,7 @@ export class App {
           beltHalfAngle: Math.max(0.01, objectDef.beltHalfAngle),
           pulseSpeed: Math.max(0, objectDef.pulseSpeed),
           pulsePhase: 0,
-          pulseScale: 1,
+          pulseScale: 0.25,
         });
       } else {
         const mesh = this.ensureSphereMesh();
