@@ -5,6 +5,7 @@ import {
   type AxisSet,
   type SphereMesh,
   type SphereProgram,
+  type TwirlMesh,
 } from '../engine/Assets';
 import { CameraController } from './camera';
 import {
@@ -18,35 +19,57 @@ import {
   mat4LookAt,
   mat4Perspective,
   mat4Multiply,
+  mat4Scale,
   mat4ScaleUniform,
   normalizeVec3,
 } from './math3d';
 
 type BaseColor =
   | 'crimson'
+  | 'red'
   | 'amber'
   | 'gold'
   | 'lime'
   | 'teal'
   | 'azure'
   | 'violet'
-  | 'magenta';
+  | 'magenta'
+  | 'white';
 
-interface SimObject {
+interface BaseSimObject {
   id: string;
-  mesh: SphereMesh;
+  type: 'sphere' | 'twirl';
   rotationY: number;
   speedPerTick: number;
   direction: 1 | -1;
   plane: 'YG' | 'GB' | 'YB';
-  shellSize: number;
-  baseColor: BaseColor;
   visible: boolean;
   shadingIntensity: number;
   opacity: number;
 }
 
-interface SimObjectDefinition {
+interface SphereObject extends BaseSimObject {
+  type: 'sphere';
+  mesh: SphereMesh;
+  shellSize: number;
+  baseColor: BaseColor;
+}
+
+interface TwirlObject extends BaseSimObject {
+  type: 'twirl';
+  mesh: TwirlMesh;
+  shellSize: number;
+  baseColor: BaseColor;
+  beltHalfAngle: number;
+  pulseSpeed: number;
+  pulsePhase: number;
+  pulseScale: number;
+}
+
+type SimObject = SphereObject | TwirlObject;
+
+interface SphereObjectDefinition {
+  type: 'sphere';
   id: string;
   speedPerTick: number;
   direction: 1 | -1;
@@ -59,6 +82,24 @@ interface SimObjectDefinition {
   initialRotationY?: number;
 }
 
+interface TwirlObjectDefinition {
+  type: 'twirl';
+  id: string;
+  speedPerTick: number;
+  direction: 1 | -1;
+  plane: 'YG' | 'GB' | 'YB';
+  shellSize: number;
+  baseColor: BaseColor;
+  visible?: boolean;
+  shadingIntensity?: number;
+  opacity?: number;
+  beltHalfAngle: number;
+  pulseSpeed: number;
+  initialRotationY?: number;
+}
+
+type SimObjectDefinition = SphereObjectDefinition | TwirlObjectDefinition;
+
 interface SimulationSegmentDefinition {
   id: string;
   name: string;
@@ -69,7 +110,8 @@ export class App {
   private canvas: HTMLCanvasElement | null = null;
   private gl: WebGLRenderingContext | null = null;
   private program: SphereProgram | null = null;
-  private sphere: SphereMesh | null = null;
+  private sphereMesh: SphereMesh | null = null;
+  private twirlMesh: TwirlMesh | null = null;
   private axes: AxisSet | null = null;
   private rotatedAxes: AxisSet | null = null;
   private axisVisibility: Record<'x' | 'y' | 'z', boolean> = { x: true, y: true, z: true };
@@ -87,6 +129,7 @@ export class App {
   private readonly defaultShellSize = 32;
   private readonly baseColorVectors: Record<BaseColor, Float32Array> = {
     crimson: new Float32Array([0.86, 0.19, 0.29]),
+    red: new Float32Array([0.95, 0.2, 0.23]),
     amber: new Float32Array([1.0, 0.75, 0.27]),
     gold: new Float32Array([0.98, 0.86, 0.29]),
     lime: new Float32Array([0.54, 0.86, 0.27]),
@@ -94,6 +137,7 @@ export class App {
     azure: new Float32Array([0.2, 0.55, 0.96]),
     violet: new Float32Array([0.55, 0.34, 0.84]),
     magenta: new Float32Array([0.78, 0.16, 0.76]),
+    white: new Float32Array([1.0, 1.0, 1.0]),
   };
   private viewMatrix = mat4Identity();
   private projectionMatrix = mat4Identity();
@@ -114,6 +158,7 @@ export class App {
       name: 'RGP Simulation',
       objects: [
         {
+          type: 'sphere',
           id: 'sphere-primary',
           speedPerTick: 1,
           direction: 1,
@@ -125,6 +170,7 @@ export class App {
           opacity: 1,
         },
         {
+          type: 'sphere',
           id: 'sphere-secondary',
           speedPerTick: 0.75,
           direction: -1,
@@ -135,6 +181,41 @@ export class App {
           shadingIntensity: 0.55,
           opacity: 0.85,
           initialRotationY: Math.PI / 4,
+        },
+      ],
+    },
+    {
+      id: 'rgp-formation',
+      name: 'RGP Formation',
+      objects: [
+        {
+          type: 'twirl',
+          id: 'white-ring',
+          speedPerTick: 1,
+          direction: 1,
+          plane: 'GB',
+          shellSize: 20,
+          baseColor: 'white',
+          visible: true,
+          shadingIntensity: 0.35,
+          opacity: 1,
+          beltHalfAngle: 0.18,
+          pulseSpeed: 0.6,
+        },
+        {
+          type: 'twirl',
+          id: 'red-ring',
+          speedPerTick: 0.9,
+          direction: 1,
+          plane: 'YG',
+          shellSize: 28,
+          baseColor: 'red',
+          visible: true,
+          shadingIntensity: 0.45,
+          opacity: 1,
+          beltHalfAngle: 0.22,
+          pulseSpeed: 0.75,
+          initialRotationY: Math.PI / 6,
         },
       ],
     },
@@ -168,13 +249,15 @@ export class App {
 
     const program = Assets.createSphereProgram(gl);
     const sphere = Assets.createSphereMesh(gl, this.sphereSegments.lat, this.sphereSegments.lon);
+    const twirl = Assets.createTwirlMesh(gl);
     const axes = Assets.createAxisSet(gl);
     const rotatedAxes = Assets.createAxisSet(gl);
 
     this.canvas = canvas;
     this.gl = gl;
     this.program = program;
-    this.sphere = sphere;
+    this.sphereMesh = sphere;
+    this.twirlMesh = twirl;
     this.axes = axes;
     this.rotatedAxes = rotatedAxes;
 
@@ -203,7 +286,7 @@ export class App {
       const deltaSeconds = (now - this.lastRenderTime) / 1000;
       this.lastRenderTime = now;
       const beats = this.simRunning ? this.simSpeed * deltaSeconds : 0;
-      this.render(beats);
+      this.render(beats, deltaSeconds);
       this.animationHandle = requestAnimationFrame(renderLoop);
     };
 
@@ -222,8 +305,12 @@ export class App {
     this.resizeObserver?.disconnect();
     this.resizeObserver = null;
 
-    if (this.gl && this.sphere) {
-      Assets.disposeSphereMesh(this.gl, this.sphere);
+    if (this.gl && this.sphereMesh) {
+      Assets.disposeSphereMesh(this.gl, this.sphereMesh);
+    }
+
+    if (this.gl && this.twirlMesh) {
+      Assets.disposeTwirlMesh(this.gl, this.twirlMesh);
     }
 
     if (this.gl && this.axes) {
@@ -241,7 +328,8 @@ export class App {
     this.canvas = null;
     this.gl = null;
     this.program = null;
-    this.sphere = null;
+    this.sphereMesh = null;
+    this.twirlMesh = null;
     this.axes = null;
     this.rotatedAxes = null;
     this.simObjects.length = 0;
@@ -265,9 +353,9 @@ export class App {
     this.projectionMatrix = mat4Perspective((50 * Math.PI) / 180, width / height, 0.1, 100);
   }
 
-  private render(beats: number): void {
+  private render(beats: number, deltaSeconds: number): void {
     // Abort rendering when core WebGL resources are not yet initialized.
-    if (!this.gl || !this.program || !this.sphere || !this.canvas) {
+    if (!this.gl || !this.program || !this.sphereMesh || !this.canvas) {
       return;
     }
 
@@ -308,15 +396,29 @@ export class App {
 
     gl.enable(gl.BLEND);
     gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
-    gl.depthMask(false);
 
-    for (const simObject of this.simObjects) {
+    const opaqueQueue = this.simObjects.filter((obj) => obj.type === 'sphere');
+    const transparentQueue = this.simObjects
+      .filter((obj): obj is TwirlObject => obj.type === 'twirl')
+      .sort((a, b) => b.shellSize - a.shellSize);
+    const renderQueue: SimObject[] = [...opaqueQueue, ...transparentQueue];
+
+    for (const simObject of renderQueue) {
       if (!simObject.visible) {
         continue;
       }
       if (beats > 0) {
         simObject.rotationY += beats * this.rotationPerBeat * simObject.speedPerTick * simObject.direction;
       }
+
+      if (this.simRunning && simObject.type === 'twirl') {
+        simObject.pulsePhase = (simObject.pulsePhase + deltaSeconds * simObject.pulseSpeed) % 1;
+        const phase = simObject.pulsePhase;
+        const triangle = phase < 0.5 ? phase * 2 : (1 - (phase - 0.5) * 2);
+        simObject.pulseScale = 0.25 + 0.75 * triangle;
+      }
+
+      gl.depthMask(simObject.type !== 'twirl');
 
       const { modelMatrix, normalMatrix } = this.computeModelMatrices(simObject);
       Assets.drawSphere(gl, program, simObject.mesh, {
@@ -325,7 +427,7 @@ export class App {
         shadingIntensity: simObject.shadingIntensity,
         planeVector: this.getPlaneNormal(simObject.plane),
         baseColor: this.getBaseColorVector(simObject.baseColor, simObject.opacity),
-        vertexColorWeight: 0.75,
+        vertexColorWeight: simObject.type === 'twirl' ? 0.35 : 0.75,
         opacityIntensity: simObject.opacity,
       });
     }
@@ -356,23 +458,45 @@ export class App {
       return;
     }
 
-    const mesh = this.ensureSphereMesh();
-
     this.simObjects.length = 0;
     for (const objectDef of segment.objects) {
-      this.simObjects.push({
-        id: objectDef.id,
-        mesh,
-        rotationY: objectDef.initialRotationY ?? 0,
-        speedPerTick: objectDef.speedPerTick,
-        direction: objectDef.direction,
-        plane: objectDef.plane,
-        shellSize: objectDef.shellSize ?? this.defaultShellSize,
-        baseColor: objectDef.baseColor ?? 'azure',
-        visible: objectDef.visible ?? true,
-        shadingIntensity: clamp(objectDef.shadingIntensity ?? this.shadingIntensity, 0, 1),
-        opacity: clamp(objectDef.opacity ?? 1, 0, 1),
-      });
+      if (objectDef.type === 'twirl') {
+        const mesh = this.ensureTwirlMesh();
+        this.simObjects.push({
+          type: 'twirl',
+          id: objectDef.id,
+          mesh,
+          rotationY: objectDef.initialRotationY ?? 0,
+          speedPerTick: objectDef.speedPerTick,
+          direction: objectDef.direction,
+          plane: objectDef.plane,
+          shellSize: objectDef.shellSize ?? this.defaultShellSize,
+          baseColor: objectDef.baseColor ?? 'azure',
+          visible: objectDef.visible ?? true,
+          shadingIntensity: clamp(objectDef.shadingIntensity ?? this.shadingIntensity, 0, 1),
+          opacity: clamp(objectDef.opacity ?? 1, 0, 1),
+          beltHalfAngle: Math.max(0.01, objectDef.beltHalfAngle),
+          pulseSpeed: Math.max(0, objectDef.pulseSpeed),
+          pulsePhase: 0,
+          pulseScale: 1,
+        });
+      } else {
+        const mesh = this.ensureSphereMesh();
+        this.simObjects.push({
+          type: 'sphere',
+          id: objectDef.id,
+          mesh,
+          rotationY: objectDef.initialRotationY ?? 0,
+          speedPerTick: objectDef.speedPerTick,
+          direction: objectDef.direction,
+          plane: objectDef.plane,
+          shellSize: objectDef.shellSize ?? this.defaultShellSize,
+          baseColor: objectDef.baseColor ?? 'azure',
+          visible: objectDef.visible ?? true,
+          shadingIntensity: clamp(objectDef.shadingIntensity ?? this.shadingIntensity, 0, 1),
+          opacity: clamp(objectDef.opacity ?? 1, 0, 1),
+        });
+      }
     }
 
     this.selectedObjectId = segment.objects[0]?.id ?? null;
@@ -380,13 +504,23 @@ export class App {
   }
 
   private ensureSphereMesh(): SphereMesh {
-    if (!this.sphere) {
+    if (!this.sphereMesh) {
       if (!this.gl) {
         throw new Error('Sphere mesh requested before WebGL context initialized.');
       }
-      this.sphere = Assets.createSphereMesh(this.gl, this.sphereSegments.lat, this.sphereSegments.lon);
+      this.sphereMesh = Assets.createSphereMesh(this.gl, this.sphereSegments.lat, this.sphereSegments.lon);
     }
-    return this.sphere;
+    return this.sphereMesh;
+  }
+
+  private ensureTwirlMesh(): TwirlMesh {
+    if (!this.twirlMesh) {
+      if (!this.gl) {
+        throw new Error('Twirl mesh requested before WebGL context initialized.');
+      }
+      this.twirlMesh = Assets.createTwirlMesh(this.gl);
+    }
+    return this.twirlMesh;
   }
 
   private drawAxisSet(
@@ -557,6 +691,18 @@ export class App {
       selected.opacity = clamp(update.opacity, 0, 1);
     }
 
+    if (selected.type === 'twirl') {
+      const belt = (update as Partial<TwirlObject>).beltHalfAngle;
+      if (typeof belt === 'number' && Number.isFinite(belt)) {
+        selected.beltHalfAngle = clamp(belt, 0.001, Math.PI / 2);
+      }
+
+      const pulse = (update as Partial<TwirlObject>).pulseSpeed;
+      if (typeof pulse === 'number' && Number.isFinite(pulse)) {
+        selected.pulseSpeed = Math.max(0, pulse);
+      }
+    }
+
     this.notifySimChange();
   }
 
@@ -590,9 +736,18 @@ export class App {
     }
 
     const rotationAndAlignment = mat4Multiply(rotationMatrix, alignmentMatrix);
-    const scaleFactor = Math.max(0.01, simObject.shellSize / this.defaultShellSize);
-    const scaleMatrix = mat4ScaleUniform(scaleFactor);
-    const modelMatrix = mat4Multiply(rotationAndAlignment, scaleMatrix);
+
+    let modelMatrix: Float32Array;
+    if (simObject.type === 'twirl') {
+      const radiusScale = Math.max(0.05, (simObject.shellSize / this.defaultShellSize) * simObject.pulseScale);
+      const heightScale = Math.max(0.01, Math.sin(simObject.beltHalfAngle));
+      const scaleMatrix = mat4Scale(Math.max(radiusScale, 0.01), Math.max(heightScale, 0.005), Math.max(radiusScale, 0.01));
+      modelMatrix = mat4Multiply(rotationAndAlignment, scaleMatrix);
+    } else {
+      const scaleFactor = Math.max(0.01, simObject.shellSize / this.defaultShellSize);
+      const scaleMatrix = mat4ScaleUniform(scaleFactor);
+      modelMatrix = mat4Multiply(rotationAndAlignment, scaleMatrix);
+    }
 
     return {
       modelMatrix,
@@ -615,7 +770,8 @@ export class App {
 
   private getBaseColorVector(color: BaseColor, opacity: number): Float32Array {
     const base = this.baseColorVectors[color];
-    return new Float32Array([base[0], base[1], base[2], clamp(opacity, 0, 1)]);
+    const alphaModifier = color === 'white' ? 0.45 : 1;
+    return new Float32Array([base[0], base[1], base[2], clamp(opacity * alphaModifier, 0, 1)]);
   }
 
   getAxisVisibility(): Readonly<Record<'x' | 'y' | 'z', boolean>> {
@@ -661,11 +817,13 @@ export class App {
     this.sphereSegments = { lat: clampedLat, lon: clampedLon };
 
     if (this.gl) {
-      const oldMesh = this.sphere;
+      const oldMesh = this.sphereMesh;
       const newMesh = Assets.createSphereMesh(this.gl, clampedLat, clampedLon);
-      this.sphere = newMesh;
+      this.sphereMesh = newMesh;
       for (const simObject of this.simObjects) {
-        simObject.mesh = newMesh;
+        if (simObject.type === 'sphere') {
+          simObject.mesh = newMesh;
+        }
       }
       if (oldMesh) {
         Assets.disposeSphereMesh(this.gl, oldMesh);

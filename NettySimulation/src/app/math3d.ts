@@ -105,6 +105,15 @@ export function mat4ScaleUniform(scale: number): Float32Array {
   ]);
 }
 
+export function mat4Scale(sx: number, sy: number, sz: number): Float32Array {
+  return new Float32Array([
+    sx, 0, 0, 0,
+    0, sy, 0, 0,
+    0, 0, sz, 0,
+    0, 0, 0, 1,
+  ]);
+}
+
 export function mat4Multiply(a: Float32Array, b: Float32Array): Float32Array {
   const out = new Float32Array(16);
 

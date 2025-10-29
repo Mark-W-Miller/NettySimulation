@@ -9,12 +9,15 @@ import {
   setSphereSharedUniforms,
   drawSphere,
 } from './assets/sphereAsset';
+import { createTwirlMesh, disposeTwirlMesh } from './assets/twirlAsset';
 
 export const Assets = {
   createAxisSet,
   disposeAxisSet,
   createSphereMesh,
   disposeSphereMesh,
+  createTwirlMesh,
+  disposeTwirlMesh,
   createSphereProgram,
   disposeSphereProgram,
   useSphereProgram,
@@ -29,3 +32,4 @@ export type {
   SphereSharedUniforms,
   SphereDrawParams,
 } from './assets/sphereAsset';
+export type { TwirlMesh } from './assets/twirlAsset';

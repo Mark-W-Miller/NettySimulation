@@ -5,6 +5,7 @@ type ObjectUpdate = Parameters<App['updateSelectedSimObject']>[0];
 
 const BASE_COLOR_OPTIONS = [
   { value: 'crimson', label: 'Crimson' },
+  { value: 'red', label: 'Red' },
   { value: 'amber', label: 'Amber' },
   { value: 'gold', label: 'Gold' },
   { value: 'lime', label: 'Lime' },
@@ -12,6 +13,7 @@ const BASE_COLOR_OPTIONS = [
   { value: 'azure', label: 'Azure' },
   { value: 'violet', label: 'Violet' },
   { value: 'magenta', label: 'Magenta' },
+  { value: 'white', label: 'White' },
 ] as const;
 
 type SimObjectView = ReturnType<App['getSimObjects']>[number];
@@ -44,16 +46,18 @@ export function createPropertiesTab(app: App): HTMLElement {
     directionCCW: HTMLInputElement;
     planeYG: HTMLInputElement;
     planeGB: HTMLInputElement;
-    planeYB: HTMLInputElement;
-    shellInput: HTMLInputElement;
-    baseColorSelect: HTMLSelectElement;
-    shadingSlider: HTMLInputElement;
-    shadingValue: HTMLSpanElement;
-    opacitySlider: HTMLInputElement;
-    opacityValue: HTMLSpanElement;
-    latInput: HTMLInputElement;
-    lonInput: HTMLInputElement;
-  };
+  planeYB: HTMLInputElement;
+  shellInput: HTMLInputElement;
+  baseColorSelect: HTMLSelectElement;
+  shadingSlider: HTMLInputElement;
+  shadingValue: HTMLSpanElement;
+  opacitySlider: HTMLInputElement;
+  opacityValue: HTMLSpanElement;
+  latInput: HTMLInputElement;
+  lonInput: HTMLInputElement;
+  beltInput?: HTMLInputElement;
+  pulseInput?: HTMLInputElement;
+};
 
   const objectControls = new Map<string, ObjectControls>();
   const openObjects = new Set<string>();
@@ -215,6 +219,58 @@ export function createPropertiesTab(app: App): HTMLElement {
     baseColorGroup.appendChild(baseColorLabel);
     baseColorGroup.appendChild(baseColorSelect);
 
+    let beltInput: HTMLInputElement | undefined;
+    let pulseInput: HTMLInputElement | undefined;
+    if (simObject.type === 'twirl') {
+      const beltGroup = document.createElement('div');
+      beltGroup.className = 'properties-group';
+      const beltLabel = document.createElement('label');
+      beltLabel.className = 'properties-label';
+      beltLabel.textContent = 'Belt Half Angle (rad)';
+      beltLabel.htmlFor = `properties-belt-${simObject.id}`;
+      beltInput = document.createElement('input');
+      beltInput.type = 'number';
+      beltInput.id = `properties-belt-${simObject.id}`;
+      beltInput.step = '0.01';
+      beltInput.min = '0.01';
+      beltInput.max = (Math.PI / 2).toFixed(2);
+      beltInput.className = 'properties-number properties-number--compact';
+      beltInput.value = simObject.beltHalfAngle.toFixed(2);
+      beltInput.addEventListener('change', () => {
+        const value = Number.parseFloat(beltInput!.value);
+        const clamped = Number.isFinite(value) ? Math.min(Math.max(value, 0.01), Math.PI / 2) : simObject.beltHalfAngle;
+        beltInput!.value = clamped.toFixed(2);
+        applyUpdate({ beltHalfAngle: clamped });
+      });
+      beltGroup.appendChild(beltLabel);
+      beltGroup.appendChild(beltInput);
+
+      const pulseGroup = document.createElement('div');
+      pulseGroup.className = 'properties-group';
+      const pulseLabel = document.createElement('label');
+      pulseLabel.className = 'properties-label';
+      pulseLabel.textContent = 'Pulse Speed';
+      pulseLabel.htmlFor = `properties-pulse-${simObject.id}`;
+      pulseInput = document.createElement('input');
+      pulseInput.type = 'number';
+      pulseInput.id = `properties-pulse-${simObject.id}`;
+      pulseInput.step = '0.05';
+      pulseInput.min = '0';
+      pulseInput.className = 'properties-number properties-number--compact';
+      pulseInput.value = simObject.pulseSpeed.toFixed(2);
+      pulseInput.addEventListener('change', () => {
+        const value = Number.parseFloat(pulseInput!.value);
+        const clamped = Number.isFinite(value) ? Math.max(0, value) : simObject.pulseSpeed;
+        pulseInput!.value = clamped.toFixed(2);
+        applyUpdate({ pulseSpeed: clamped });
+      });
+      pulseGroup.appendChild(pulseLabel);
+      pulseGroup.appendChild(pulseInput);
+
+      form.appendChild(beltGroup);
+      form.appendChild(pulseGroup);
+    }
+
     const opacityGroup = document.createElement('div');
     opacityGroup.className = 'properties-group';
     const opacityLabel = document.createElement('label');
@@ -367,6 +423,8 @@ export function createPropertiesTab(app: App): HTMLElement {
       opacityValue,
       latInput,
       lonInput,
+      beltInput,
+      pulseInput,
     };
   };
 
@@ -406,6 +464,16 @@ export function createPropertiesTab(app: App): HTMLElement {
 
     controls.opacitySlider.value = simObject.opacity.toString();
     controls.opacityValue.textContent = simObject.opacity.toFixed(2);
+
+    if (controls.beltInput) {
+      const beltValue = simObject.type === 'twirl' ? simObject.beltHalfAngle : 0;
+      controls.beltInput.value = beltValue.toFixed(2);
+    }
+
+    if (controls.pulseInput) {
+      const pulseValue = simObject.type === 'twirl' ? simObject.pulseSpeed : 0;
+      controls.pulseInput.value = pulseValue.toFixed(2);
+    }
 
     controls.latInput.value = String(segments.lat);
     controls.lonInput.value = String(segments.lon);
