@@ -82,7 +82,7 @@ export class App {
   private rotatedAxes: AxisSet | null = null;
   private axisVisibility: Record<'x' | 'y' | 'z', boolean> = { x: true, y: true, z: true };
   private showSecondaryAxes = true;
-  private axisOpacity = 1;
+  private axisOpacitySlider = 1;
   private sphereSegments = { lat: 48, lon: 48 };
   private shadingIntensity = 0.4;
 
@@ -476,7 +476,8 @@ export class App {
 
     // Draw axes using the dedicated axis shader.
     if (shouldRenderAxes) {
-      gl.clear(gl.DEPTH_BUFFER_BIT);
+      gl.enable(gl.BLEND);
+      gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
       Assets.useAxisProgram(gl, axisProgram);
       Assets.setAxisSharedUniforms(gl, axisProgram, sharedUniforms);
       if (shouldRenderPrimaryAxes && this.axes) {
@@ -494,6 +495,8 @@ export class App {
         );
       }
       // Restore sphere program bindings for any subsequent draws.
+      gl.disable(gl.BLEND);
+      gl.clear(gl.DEPTH_BUFFER_BIT);
       Assets.useSphereProgram(gl, sphereProgram);
       Assets.setSphereSharedUniforms(gl, sphereProgram, sharedUniforms);
     }
@@ -617,7 +620,7 @@ export class App {
         clipEnabled: false,
         clipCenter: this.originVector,
         clipRadius: 0,
-        opacity: this.axisOpacity,
+        opacity: this.getAxisOpacityAlpha(),
       });
       gl.disable(gl.POLYGON_OFFSET_FILL);
       gl.enable(gl.CULL_FACE);
@@ -840,16 +843,20 @@ export class App {
   }
 
   getAxisOpacity(): number {
-    return this.axisOpacity;
+    return this.axisOpacitySlider;
   }
 
   setAxisOpacity(value: number): void {
     const clamped = clamp(value, 0, 1);
-    if (this.axisOpacity === clamped) {
+    if (this.axisOpacitySlider === clamped) {
       return;
     }
-    this.axisOpacity = clamped;
+    this.axisOpacitySlider = clamped;
     this.notifySimChange();
+  }
+
+  private getAxisOpacityAlpha(): number {
+    return this.axisOpacitySlider;
   }
 
   getSecondaryAxesVisible(): boolean {
