@@ -8,22 +8,45 @@ export interface TwirlProgram {
   program: WebGLProgram;
   attribPosition: number;
   attribNormal: number;
+  attribColor: number;
   uniformModel: WebGLUniformLocation;
   uniformView: WebGLUniformLocation;
   uniformProjection: WebGLUniformLocation;
   uniformNormalMatrix: WebGLUniformLocation;
   uniformColor: WebGLUniformLocation;
+  uniformLightDirection: WebGLUniformLocation;
+  uniformPlaneVector: WebGLUniformLocation;
+  uniformShadingIntensity: WebGLUniformLocation;
+  uniformBeltHalfAngle: WebGLUniformLocation;
+  uniformPulseScale: WebGLUniformLocation;
+  uniformPatternRepeats: WebGLUniformLocation;
+  uniformPatternOffset: WebGLUniformLocation;
+  uniformOpacityIntensity: WebGLUniformLocation;
+  uniformClipEnabled: WebGLUniformLocation;
+  uniformClipCenter: WebGLUniformLocation;
+  uniformClipRadius: WebGLUniformLocation;
 }
 
 export interface TwirlSharedUniforms {
   viewMatrix: Float32Array;
   projectionMatrix: Float32Array;
+  lightDirection: Float32Array;
 }
 
 export interface TwirlDrawParams {
   modelMatrix: Float32Array;
   normalMatrix: Float32Array;
   baseColor: Float32Array;
+  planeVector: Float32Array;
+  shadingIntensity: number;
+  beltHalfAngle: number;
+  pulseScale: number;
+  patternRepeats: number;
+  patternOffset: number;
+  opacityIntensity: number;
+  clipEnabled: boolean;
+  clipCenter: Float32Array;
+  clipRadius: number;
 }
 
 export function createTwirlMesh(
@@ -157,6 +180,7 @@ export function createTwirlProgram(gl: WebGLRenderingContext): TwirlProgram {
     varying vec3 vNormal;
     varying vec3 vWorldPosition;
     varying vec3 vBaseColor;
+    varying vec3 vVertexTint;
     varying float vAlpha;
 
     void main() {
@@ -164,6 +188,7 @@ export function createTwirlProgram(gl: WebGLRenderingContext): TwirlProgram {
       vWorldPosition = worldPosition.xyz;
       vNormal = normalize(uNormalMatrix * aNormal);
       vBaseColor = uColor.rgb;
+      vVertexTint = aColor;
       vAlpha = uColor.a;
       gl_Position = uProjectionMatrix * uViewMatrix * worldPosition;
     }
@@ -175,10 +200,89 @@ export function createTwirlProgram(gl: WebGLRenderingContext): TwirlProgram {
     varying vec3 vNormal;
     varying vec3 vWorldPosition;
     varying vec3 vBaseColor;
+    varying vec3 vVertexTint;
     varying float vAlpha;
 
+    uniform vec3 uLightDirection;
+    uniform vec3 uPlaneVector;
+    uniform float uShadingIntensity;
+    uniform float uBeltHalfAngle;
+    uniform float uPulseScale;
+    uniform float uPatternRepeats;
+    uniform float uPatternOffset;
+    uniform float uOpacityIntensity;
+    uniform float uClipEnabled;
+    uniform vec3 uClipCenter;
+    uniform float uClipRadius;
+
+    const float PI = 3.14159265358979323846264;
+
+    vec3 buildTangent(vec3 normal) {
+      vec3 ref = abs(normal.y) < 0.9 ? vec3(0.0, 1.0, 0.0) : vec3(1.0, 0.0, 0.0);
+      return normalize(cross(ref, normal));
+    }
+
     void main() {
-      gl_FragColor = vec4(vBaseColor, vAlpha);
+      if (uClipEnabled > 0.5) {
+        float distanceToCenter = distance(vWorldPosition, uClipCenter);
+        if (distanceToCenter < uClipRadius) {
+          discard;
+        }
+      }
+
+      vec3 normal = normalize(vNormal);
+      vec3 surfaceDir = normalize(vWorldPosition);
+
+      vec3 plane = uPlaneVector;
+      float planeLength = length(plane);
+      if (planeLength < 0.00001) {
+        plane = normal;
+        planeLength = 1.0;
+      }
+      plane /= planeLength;
+
+      vec3 tangent = buildTangent(plane);
+      vec3 bitangent = normalize(cross(plane, tangent));
+
+      float alignment = dot(surfaceDir, plane);
+
+      float pulse = clamp(uPulseScale, 0.0, 1.0);
+      float baseBelt = max(0.01, uBeltHalfAngle);
+      float beltAngle = baseBelt * mix(0.65, 1.3, pulse);
+      float feather = beltAngle * 0.4;
+      float bandStrength = 1.0 - smoothstep(beltAngle, beltAngle + feather, abs(alignment));
+      float mirroredAlignment = dot(surfaceDir, -plane);
+      float rearBand = 1.0 - smoothstep(beltAngle, beltAngle + feather, abs(mirroredAlignment));
+      bandStrength = max(bandStrength, rearBand);
+
+      float uCoord = dot(surfaceDir, tangent);
+      float vCoord = dot(surfaceDir, bitangent);
+      float angle = atan(vCoord, uCoord);
+      float repeats = max(1.0, uPatternRepeats);
+      float angleNorm = fract((angle + PI) / (2.0 * PI) + uPatternOffset);
+      float triangle = abs(fract(angleNorm * repeats) - 0.5) * 2.0;
+      float ridge = smoothstep(0.15, 0.85, triangle);
+
+      vec3 lightDir = normalize(uLightDirection);
+      float diffuse = max(dot(normal, lightDir), 0.0);
+      float ambient = 0.35;
+      vec3 litBase = vBaseColor * (ambient + (1.0 - ambient) * diffuse);
+
+      float intensity = clamp(uShadingIntensity, 0.0, 1.0);
+      vec3 tintBlend = mix(litBase, vVertexTint, 0.15);
+      float bandBoost = mix(0.45, 1.1, intensity);
+      float ridgeBoost = mix(0.7, 1.35, ridge);
+      vec3 shaded = clamp(tintBlend * bandBoost * ridgeBoost * (bandStrength + 0.05), 0.0, 1.0);
+
+      float opacityControl = clamp(uOpacityIntensity, 0.0, 1.0);
+      float fade = clamp((beltAngle + feather - abs(alignment)) / (beltAngle + feather), 0.0, 1.0);
+      float alpha = vAlpha * bandStrength * mix(pow(fade, 1.5), fade, opacityControl);
+
+      if (alpha < 0.02) {
+        discard;
+      }
+
+      gl_FragColor = vec4(shaded, clamp(alpha, 0.0, 1.0));
     }
   `;
 
@@ -207,20 +311,45 @@ export function createTwirlProgram(gl: WebGLRenderingContext): TwirlProgram {
 
   const attribPosition = gl.getAttribLocation(program, 'aPosition');
   const attribNormal = gl.getAttribLocation(program, 'aNormal');
+  const attribColor = gl.getAttribLocation(program, 'aColor');
+
   const uniformModel = getRequiredUniform(gl, program, 'uModelMatrix');
   const uniformView = getRequiredUniform(gl, program, 'uViewMatrix');
   const uniformProjection = getRequiredUniform(gl, program, 'uProjectionMatrix');
   const uniformNormalMatrix = getRequiredUniform(gl, program, 'uNormalMatrix');
   const uniformColor = getRequiredUniform(gl, program, 'uColor');
+  const uniformLightDirection = getRequiredUniform(gl, program, 'uLightDirection');
+  const uniformPlaneVector = getRequiredUniform(gl, program, 'uPlaneVector');
+  const uniformShadingIntensity = getRequiredUniform(gl, program, 'uShadingIntensity');
+  const uniformBeltHalfAngle = getRequiredUniform(gl, program, 'uBeltHalfAngle');
+  const uniformPulseScale = getRequiredUniform(gl, program, 'uPulseScale');
+  const uniformPatternRepeats = getRequiredUniform(gl, program, 'uPatternRepeats');
+  const uniformPatternOffset = getRequiredUniform(gl, program, 'uPatternOffset');
+  const uniformOpacityIntensity = getRequiredUniform(gl, program, 'uOpacityIntensity');
+  const uniformClipEnabled = getRequiredUniform(gl, program, 'uClipEnabled');
+  const uniformClipCenter = getRequiredUniform(gl, program, 'uClipCenter');
+  const uniformClipRadius = getRequiredUniform(gl, program, 'uClipRadius');
   return {
     program,
     attribPosition,
     attribNormal,
+    attribColor,
     uniformModel,
     uniformView,
     uniformProjection,
     uniformNormalMatrix,
     uniformColor,
+    uniformLightDirection,
+    uniformPlaneVector,
+    uniformShadingIntensity,
+    uniformBeltHalfAngle,
+    uniformPulseScale,
+    uniformPatternRepeats,
+    uniformPatternOffset,
+    uniformOpacityIntensity,
+    uniformClipEnabled,
+    uniformClipCenter,
+    uniformClipRadius,
   };
 }
 
@@ -242,6 +371,7 @@ export function setTwirlSharedUniforms(
 ): void {
   gl.uniformMatrix4fv(program.uniformView, false, uniforms.viewMatrix);
   gl.uniformMatrix4fv(program.uniformProjection, false, uniforms.projectionMatrix);
+  gl.uniform3fv(program.uniformLightDirection, uniforms.lightDirection);
 }
 
 export function drawTwirl(
@@ -253,6 +383,16 @@ export function drawTwirl(
   gl.uniformMatrix4fv(program.uniformModel, false, params.modelMatrix);
   gl.uniformMatrix3fv(program.uniformNormalMatrix, false, params.normalMatrix);
   gl.uniform4fv(program.uniformColor, params.baseColor);
+  gl.uniform3fv(program.uniformPlaneVector, params.planeVector);
+  gl.uniform1f(program.uniformShadingIntensity, params.shadingIntensity);
+  gl.uniform1f(program.uniformBeltHalfAngle, params.beltHalfAngle);
+  gl.uniform1f(program.uniformPulseScale, params.pulseScale);
+  gl.uniform1f(program.uniformPatternRepeats, params.patternRepeats);
+  gl.uniform1f(program.uniformPatternOffset, params.patternOffset);
+  gl.uniform1f(program.uniformOpacityIntensity, params.opacityIntensity);
+  gl.uniform1f(program.uniformClipEnabled, params.clipEnabled ? 1.0 : 0.0);
+  gl.uniform3fv(program.uniformClipCenter, params.clipCenter);
+  gl.uniform1f(program.uniformClipRadius, params.clipRadius);
 
   gl.bindBuffer(gl.ARRAY_BUFFER, mesh.positionBuffer);
   gl.vertexAttribPointer(program.attribPosition, 3, gl.FLOAT, false, 0, 0);
@@ -262,8 +402,14 @@ export function drawTwirl(
   gl.vertexAttribPointer(program.attribNormal, 3, gl.FLOAT, false, 0, 0);
   gl.enableVertexAttribArray(program.attribNormal);
 
+  gl.bindBuffer(gl.ARRAY_BUFFER, mesh.colorBuffer);
+  gl.vertexAttribPointer(program.attribColor, 3, gl.FLOAT, false, 0, 0);
+  gl.enableVertexAttribArray(program.attribColor);
+
   gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, mesh.indexBuffer);
-  gl.drawElements(gl.TRIANGLES, mesh.indexCount, gl.UNSIGNED_SHORT, 0);
+      gl.disable(gl.CULL_FACE);
+      gl.drawElements(gl.TRIANGLES, mesh.indexCount, gl.UNSIGNED_SHORT, 0);
+      gl.enable(gl.CULL_FACE);
 }
 
 function compileShader(gl: WebGLRenderingContext, type: number, source: string): WebGLShader {

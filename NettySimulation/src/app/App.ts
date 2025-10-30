@@ -453,6 +453,16 @@ export class App {
           modelMatrix,
           normalMatrix,
           baseColor: this.getBaseColorVector(twirlObject.baseColor, twirlObject.opacity),
+          planeVector: this.getPlaneNormal(twirlObject.plane),
+          shadingIntensity: twirlObject.shadingIntensity,
+          beltHalfAngle: twirlObject.beltHalfAngle,
+          pulseScale: twirlObject.pulseScale,
+          patternRepeats: Math.max(1, this.sphereSegments.lon / 2),
+          patternOffset: ((twirlObject.rotationY / (Math.PI * 2)) % 1 + 1) % 1,
+          opacityIntensity: twirlObject.opacity,
+          clipEnabled: false,
+          clipCenter: this.originVector,
+          clipRadius: 0,
         });
       }
 
