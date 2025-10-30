@@ -1,5 +1,13 @@
 // Assets.ts — centralizes asset factory accessors for the engine
-import { createAxisSet, disposeAxisSet } from './assets/axisAsset';
+import {
+  createAxisSet,
+  disposeAxisSet,
+  createAxisProgram,
+  disposeAxisProgram,
+  useAxisProgram,
+  setAxisSharedUniforms,
+  drawAxis,
+} from './assets/axisAsset';
 import {
   createSphereMesh,
   disposeSphereMesh,
@@ -9,11 +17,24 @@ import {
   setSphereSharedUniforms,
   drawSphere,
 } from './assets/sphereAsset';
-import { createTwirlMesh, disposeTwirlMesh } from './assets/twirlAsset';
+import {
+  createTwirlMesh,
+  disposeTwirlMesh,
+  createTwirlProgram,
+  disposeTwirlProgram,
+  useTwirlProgram,
+  setTwirlSharedUniforms,
+  drawTwirl,
+} from './assets/twirlAsset';
 
 export const Assets = {
   createAxisSet,
   disposeAxisSet,
+  createAxisProgram,
+  disposeAxisProgram,
+  useAxisProgram,
+  setAxisSharedUniforms,
+  drawAxis,
   createSphereMesh,
   disposeSphereMesh,
   createTwirlMesh,
@@ -23,13 +44,29 @@ export const Assets = {
   useSphereProgram,
   setSphereSharedUniforms,
   drawSphere,
+  createTwirlProgram,
+  disposeTwirlProgram,
+  useTwirlProgram,
+  setTwirlSharedUniforms,
+  drawTwirl,
 };
 
-export type { AxisMesh, AxisSet } from './assets/axisAsset';
+export type {
+  AxisMesh,
+  AxisSet,
+  AxisProgram,
+  AxisSharedUniforms,
+  AxisDrawParams,
+} from './assets/axisAsset';
 export type {
   SphereMesh,
   SphereProgram,
   SphereSharedUniforms,
   SphereDrawParams,
 } from './assets/sphereAsset';
-export type { TwirlMesh } from './assets/twirlAsset';
+export type {
+  TwirlMesh,
+  TwirlProgram,
+  TwirlSharedUniforms,
+  TwirlDrawParams,
+} from './assets/twirlAsset';

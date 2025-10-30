@@ -40,6 +40,8 @@ export interface TwirlObjectDefinition {
   beltHalfAngle: number;
   pulseSpeed: number;
   initialRotationY?: number;
+  initialPulsePhase?: number;
+  initialPulseScale?: number;
 }
 
 export type SimObjectDefinition = SphereObjectDefinition | TwirlObjectDefinition;

@@ -14,6 +14,35 @@ export interface AxisSet {
   z: AxisMesh;
 }
 
+export interface AxisProgram {
+  program: WebGLProgram;
+  attribPosition: number;
+  attribNormal: number;
+  attribColor: number;
+  uniformModel: WebGLUniformLocation;
+  uniformView: WebGLUniformLocation;
+  uniformProjection: WebGLUniformLocation;
+  uniformNormalMatrix: WebGLUniformLocation;
+  uniformLightDirection: WebGLUniformLocation;
+  uniformClipEnabled: WebGLUniformLocation;
+  uniformClipCenter: WebGLUniformLocation;
+  uniformClipRadius: WebGLUniformLocation;
+}
+
+export interface AxisSharedUniforms {
+  viewMatrix: Float32Array;
+  projectionMatrix: Float32Array;
+  lightDirection: Float32Array;
+}
+
+export interface AxisDrawParams {
+  modelMatrix: Float32Array;
+  normalMatrix: Float32Array;
+  clipEnabled: boolean;
+  clipCenter: Float32Array;
+  clipRadius: number;
+}
+
 const AXIS_COLORS: Record<'x' | 'y' | 'z', [number, number, number]> = {
   x: [0.2, 0.9, 0.5],
   y: [0.95, 0.93, 0.4],
@@ -36,6 +65,159 @@ export function disposeAxisSet(gl: WebGLRenderingContext, set: AxisSet | null): 
   disposeAxisMesh(gl, set.x);
   disposeAxisMesh(gl, set.y);
   disposeAxisMesh(gl, set.z);
+}
+
+export function createAxisProgram(gl: WebGLRenderingContext): AxisProgram {
+  const vertexShaderSource = `
+    attribute vec3 aPosition;
+    attribute vec3 aNormal;
+    attribute vec3 aColor;
+
+    uniform mat4 uModelMatrix;
+    uniform mat4 uViewMatrix;
+    uniform mat4 uProjectionMatrix;
+    uniform mat3 uNormalMatrix;
+
+    varying vec3 vNormal;
+    varying vec3 vWorldPosition;
+    varying vec3 vColor;
+
+    void main() {
+      vec4 worldPosition = uModelMatrix * vec4(aPosition, 1.0);
+      vWorldPosition = worldPosition.xyz;
+      vNormal = normalize(uNormalMatrix * aNormal);
+      vColor = aColor;
+      gl_Position = uProjectionMatrix * uViewMatrix * worldPosition;
+    }
+  `;
+
+  const fragmentShaderSource = `
+    precision mediump float;
+
+    varying vec3 vNormal;
+    varying vec3 vWorldPosition;
+    varying vec3 vColor;
+
+    uniform vec3 uLightDirection;
+    uniform float uClipEnabled;
+    uniform vec3 uClipCenter;
+    uniform float uClipRadius;
+
+    void main() {
+      if (uClipEnabled > 0.5) {
+        float distanceToCenter = distance(vWorldPosition, uClipCenter);
+        if (distanceToCenter < uClipRadius) {
+          discard;
+        }
+      }
+
+      vec3 normal = normalize(vNormal);
+      float diffuse = max(dot(normal, normalize(uLightDirection)), 0.0);
+      float ambient = 0.35;
+      vec3 shaded = vColor * (ambient + (1.0 - ambient) * diffuse);
+      gl_FragColor = vec4(clamp(shaded, 0.0, 1.0), 1.0);
+    }
+  `;
+
+  const vertexShader = compileShader(gl, gl.VERTEX_SHADER, vertexShaderSource);
+  const fragmentShader = compileShader(gl, gl.FRAGMENT_SHADER, fragmentShaderSource);
+
+  const program = gl.createProgram();
+  if (!program) {
+    throw new Error('Failed to create axis program.');
+  }
+
+  gl.attachShader(program, vertexShader);
+  gl.attachShader(program, fragmentShader);
+  gl.linkProgram(program);
+
+  if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+    const info = gl.getProgramInfoLog(program);
+    gl.deleteProgram(program);
+    gl.deleteShader(vertexShader);
+    gl.deleteShader(fragmentShader);
+    throw new Error(`Failed to link axis program: ${info ?? 'unknown error'}`);
+  }
+
+  gl.deleteShader(vertexShader);
+  gl.deleteShader(fragmentShader);
+
+  const attribPosition = gl.getAttribLocation(program, 'aPosition');
+  const attribNormal = gl.getAttribLocation(program, 'aNormal');
+  const attribColor = gl.getAttribLocation(program, 'aColor');
+
+  const uniformModel = getRequiredUniform(gl, program, 'uModelMatrix');
+  const uniformView = getRequiredUniform(gl, program, 'uViewMatrix');
+  const uniformProjection = getRequiredUniform(gl, program, 'uProjectionMatrix');
+  const uniformNormalMatrix = getRequiredUniform(gl, program, 'uNormalMatrix');
+  const uniformLightDirection = getRequiredUniform(gl, program, 'uLightDirection');
+  const uniformClipEnabled = getRequiredUniform(gl, program, 'uClipEnabled');
+  const uniformClipCenter = getRequiredUniform(gl, program, 'uClipCenter');
+  const uniformClipRadius = getRequiredUniform(gl, program, 'uClipRadius');
+
+  return {
+    program,
+    attribPosition,
+    attribNormal,
+    attribColor,
+    uniformModel,
+    uniformView,
+    uniformProjection,
+    uniformNormalMatrix,
+    uniformLightDirection,
+    uniformClipEnabled,
+    uniformClipCenter,
+    uniformClipRadius,
+  };
+}
+
+export function disposeAxisProgram(gl: WebGLRenderingContext, axisProgram: AxisProgram | null): void {
+  if (!axisProgram) {
+    return;
+  }
+  gl.deleteProgram(axisProgram.program);
+}
+
+export function useAxisProgram(gl: WebGLRenderingContext, axisProgram: AxisProgram): void {
+  gl.useProgram(axisProgram.program);
+}
+
+export function setAxisSharedUniforms(
+  gl: WebGLRenderingContext,
+  axisProgram: AxisProgram,
+  uniforms: AxisSharedUniforms,
+): void {
+  gl.uniformMatrix4fv(axisProgram.uniformView, false, uniforms.viewMatrix);
+  gl.uniformMatrix4fv(axisProgram.uniformProjection, false, uniforms.projectionMatrix);
+  gl.uniform3fv(axisProgram.uniformLightDirection, uniforms.lightDirection);
+}
+
+export function drawAxis(
+  gl: WebGLRenderingContext,
+  axisProgram: AxisProgram,
+  mesh: AxisMesh,
+  params: AxisDrawParams,
+): void {
+  gl.uniformMatrix4fv(axisProgram.uniformModel, false, params.modelMatrix);
+  gl.uniformMatrix3fv(axisProgram.uniformNormalMatrix, false, params.normalMatrix);
+  gl.uniform1f(axisProgram.uniformClipEnabled, params.clipEnabled ? 1.0 : 0.0);
+  gl.uniform3fv(axisProgram.uniformClipCenter, params.clipCenter);
+  gl.uniform1f(axisProgram.uniformClipRadius, params.clipRadius);
+
+  gl.bindBuffer(gl.ARRAY_BUFFER, mesh.positionBuffer);
+  gl.vertexAttribPointer(axisProgram.attribPosition, 3, gl.FLOAT, false, 0, 0);
+  gl.enableVertexAttribArray(axisProgram.attribPosition);
+
+  gl.bindBuffer(gl.ARRAY_BUFFER, mesh.normalBuffer);
+  gl.vertexAttribPointer(axisProgram.attribNormal, 3, gl.FLOAT, false, 0, 0);
+  gl.enableVertexAttribArray(axisProgram.attribNormal);
+
+  gl.bindBuffer(gl.ARRAY_BUFFER, mesh.colorBuffer);
+  gl.vertexAttribPointer(axisProgram.attribColor, 3, gl.FLOAT, false, 0, 0);
+  gl.enableVertexAttribArray(axisProgram.attribColor);
+
+  gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, mesh.indexBuffer);
+  gl.drawElements(gl.TRIANGLES, mesh.indexCount, gl.UNSIGNED_SHORT, 0);
 }
 
 function createAxisMesh(gl: WebGLRenderingContext, axis: 'x' | 'y' | 'z'): AxisMesh {
@@ -159,4 +341,30 @@ function pushVertex(
       normals.push(cos, sin, 0);
       break;
   }
+}
+
+function compileShader(gl: WebGLRenderingContext, type: number, source: string): WebGLShader {
+  const shader = gl.createShader(type);
+  if (!shader) {
+    throw new Error('Failed to create WebGL shader.');
+  }
+
+  gl.shaderSource(shader, source);
+  gl.compileShader(shader);
+
+  if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+    const info = gl.getShaderInfoLog(shader);
+    gl.deleteShader(shader);
+    throw new Error(`Shader compile failure: ${info ?? 'unknown error'}`);
+  }
+
+  return shader;
+}
+
+function getRequiredUniform(gl: WebGLRenderingContext, program: WebGLProgram, name: string): WebGLUniformLocation {
+  const location = gl.getUniformLocation(program, name);
+  if (!location) {
+    throw new Error(`Uniform ${name} is missing.`);
+  }
+  return location;
 }

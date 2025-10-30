@@ -3,9 +3,11 @@ import {
   Assets,
   type AxisMesh,
   type AxisSet,
+  type AxisProgram,
   type SphereMesh,
   type SphereProgram,
   type TwirlMesh,
+  type TwirlProgram,
 } from '../engine/Assets';
 import {
   type BaseColor,
@@ -71,7 +73,9 @@ interface SimulationSegmentDefinition {
 export class App {
   private canvas: HTMLCanvasElement | null = null;
   private gl: WebGLRenderingContext | null = null;
-  private program: SphereProgram | null = null;
+  private sphereProgram: SphereProgram | null = null;
+  private twirlProgram: TwirlProgram | null = null;
+  private axisProgram: AxisProgram | null = null;
   private sphereMesh: SphereMesh | null = null;
   private twirlMesh: TwirlMesh | null = null;
   private axes: AxisSet | null = null;
@@ -84,6 +88,7 @@ export class App {
   private readonly camera = new CameraController();
   private readonly identityModelMatrix = mat4Identity();
   private readonly identityNormalMatrix = mat3Identity();
+  private readonly originVector = new Float32Array([0, 0, 0]);
   private readonly alignYAxisToZMatrix = mat4FromXRotation(-Math.PI / 2);
   private readonly alignYAxisToXMatrix = mat4FromZRotation(-Math.PI / 2);
   private readonly rotatedAxisModelMatrix: Float32Array;
@@ -164,6 +169,8 @@ export class App {
           beltHalfAngle: 0.18,
           pulseSpeed: 0.75,
           initialRotationY: Math.PI / 6,
+          initialPulsePhase: 0.5,
+          initialPulseScale: 0.25,
         },
         {
           type: 'twirl',
@@ -179,6 +186,8 @@ export class App {
           beltHalfAngle: 0.22,
           pulseSpeed: 0.75,
           initialRotationY: Math.PI / 6,
+          initialPulsePhase: 0.5,
+          initialPulseScale: 1,
         },
       ],
     },
@@ -210,23 +219,36 @@ export class App {
       throw new Error('WebGL not supported in this browser.');
     }
 
-    const program = Assets.createSphereProgram(gl);
+    const sphereProgram = Assets.createSphereProgram(gl);
+    const axisProgram = Assets.createAxisProgram(gl);
+    const twirlProgram = Assets.createTwirlProgram(gl);
     const sphere = Assets.createSphereMesh(gl, this.sphereSegments.lat, this.sphereSegments.lon);
-    const twirl = Assets.createTwirlMesh(gl);
+    const twirl = Assets.createTwirlMesh(
+      gl,
+      Math.max(32, this.sphereSegments.lon * 4),
+      this.sphereSegments.lon,
+    );
     const axes = Assets.createAxisSet(gl);
     const rotatedAxes = Assets.createAxisSet(gl);
 
     this.canvas = canvas;
     this.gl = gl;
-    this.program = program;
+    this.sphereProgram = sphereProgram;
+    this.axisProgram = axisProgram;
+    this.twirlProgram = twirlProgram;
     this.sphereMesh = sphere;
     this.twirlMesh = twirl;
     this.axes = axes;
     this.rotatedAxes = rotatedAxes;
 
-    const defaultSegment = this.segmentDefinitions[0];
+    const hashSegment = window.location.hash.match(/#segment=(.+)$/)?.[1] ?? null;
+    const defaultSegment = hashSegment
+      ? this.segmentDefinitions.find((segment) => segment.id === hashSegment) ?? null
+      : null;
     if (defaultSegment) {
       this.loadSegment(defaultSegment.id);
+    } else if (this.segmentDefinitions[0]) {
+      this.loadSegment(this.segmentDefinitions[0].id);
     } else {
       this.simObjects.length = 0;
       this.selectedSegmentId = null;
@@ -284,13 +306,23 @@ export class App {
       Assets.disposeAxisSet(this.gl, this.rotatedAxes);
     }
 
-    if (this.gl) {
-      Assets.disposeSphereProgram(this.gl, this.program);
+    if (this.gl && this.axisProgram) {
+      Assets.disposeAxisProgram(this.gl, this.axisProgram);
+    }
+
+    if (this.gl && this.sphereProgram) {
+      Assets.disposeSphereProgram(this.gl, this.sphereProgram);
+    }
+
+    if (this.gl && this.twirlProgram) {
+      Assets.disposeTwirlProgram(this.gl, this.twirlProgram);
     }
 
     this.canvas = null;
     this.gl = null;
-    this.program = null;
+    this.sphereProgram = null;
+    this.axisProgram = null;
+    this.twirlProgram = null;
     this.sphereMesh = null;
     this.twirlMesh = null;
     this.axes = null;
@@ -318,12 +350,22 @@ export class App {
 
   private render(beats: number, deltaSeconds: number): void {
     // Abort rendering when core WebGL resources are not yet initialized.
-    if (!this.gl || !this.program || !this.sphereMesh || !this.canvas) {
+    if (
+      !this.gl ||
+      !this.sphereProgram ||
+      !this.axisProgram ||
+      !this.twirlProgram ||
+      !this.sphereMesh ||
+      !this.twirlMesh ||
+      !this.canvas
+    ) {
       return;
     }
 
     const gl = this.gl;
-    const program = this.program;
+    const sphereProgram = this.sphereProgram;
+    const axisProgram = this.axisProgram;
+    const twirlProgram = this.twirlProgram;
 
     // Ensure fragments respect depth buffering (z-order).
     gl.enable(gl.DEPTH_TEST);
@@ -349,24 +391,21 @@ export class App {
     // Build the camera view transform.
     this.viewMatrix = mat4LookAt(position, target, [0, 1, 0]);
 
-    // Activate the shader program for subsequent draw calls.
-    Assets.useSphereProgram(gl, program);
-    Assets.setSphereSharedUniforms(gl, program, {
+    const sharedUniforms = {
       viewMatrix: this.viewMatrix,
       projectionMatrix: this.projectionMatrix,
       lightDirection: normalizeVec3([0.5, 0.8, 0.4]),
-    });
+    };
 
-    gl.enable(gl.BLEND);
-    gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+    // Activate the sphere program for opaque objects by default.
+    Assets.useSphereProgram(gl, sphereProgram);
+    Assets.setSphereSharedUniforms(gl, sphereProgram, sharedUniforms);
+    gl.disable(gl.BLEND);
 
-    const opaqueQueue = this.simObjects.filter((obj) => obj.type === 'sphere');
-    const transparentQueue = this.simObjects
-      .filter((obj): obj is TwirlObject => obj.type === 'twirl')
-      .sort((a, b) => b.shellSize - a.shellSize);
-    const renderQueue: SimObject[] = [...opaqueQueue, ...transparentQueue];
+    const sphereQueue: SphereObject[] = [];
+    const twirlQueue: TwirlObject[] = [];
 
-    for (const simObject of renderQueue) {
+    for (const simObject of this.simObjects) {
       if (!simObject.visible) {
         continue;
       }
@@ -380,29 +419,71 @@ export class App {
         const baseTriangle = simObject.id === 'white-ring' ? 1 - triangle : triangle;
         simObject.pulseScale = 0.25 + 0.75 * baseTriangle;
       }
+      if (simObject.type === 'twirl') {
+        twirlQueue.push(simObject);
+      } else {
+        sphereQueue.push(simObject);
+      }
+    }
 
-      const { modelMatrix, normalMatrix } = this.computeModelMatrices(simObject);
-      Assets.drawSphere(gl, program, simObject.mesh, {
+    for (const sphereObject of sphereQueue) {
+      const { modelMatrix, normalMatrix } = this.computeModelMatrices(sphereObject);
+      Assets.drawSphere(gl, sphereProgram, sphereObject.mesh, {
         modelMatrix,
         normalMatrix,
-        shadingIntensity: simObject.shadingIntensity,
-        planeVector: this.getPlaneNormal(simObject.plane),
-        baseColor: this.getBaseColorVector(simObject.baseColor, simObject.opacity),
-        vertexColorWeight: simObject.type === 'twirl' ? 0.35 : 0.75,
-        opacityIntensity: simObject.opacity,
+        shadingIntensity: sphereObject.shadingIntensity,
+        planeVector: this.getPlaneNormal(sphereObject.plane),
+        baseColor: this.getBaseColorVector(sphereObject.baseColor, sphereObject.opacity),
+        vertexColorWeight: 0.75,
+        opacityIntensity: sphereObject.opacity,
       });
     }
 
-    gl.disable(gl.BLEND);
+    if (twirlQueue.length > 0) {
+      const sortedTwirlQueue = [...twirlQueue].sort((a, b) => b.shellSize - a.shellSize);
 
-    // Draw axes
+      Assets.useTwirlProgram(gl, twirlProgram);
+      Assets.setTwirlSharedUniforms(gl, twirlProgram, sharedUniforms);
+      gl.enable(gl.BLEND);
+      gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+
+      for (const twirlObject of sortedTwirlQueue) {
+        const { modelMatrix, normalMatrix } = this.computeModelMatrices(twirlObject);
+        Assets.drawTwirl(gl, twirlProgram, twirlObject.mesh, {
+          modelMatrix,
+          normalMatrix,
+          baseColor: this.getBaseColorVector(twirlObject.baseColor, twirlObject.opacity),
+        });
+      }
+
+      gl.disable(gl.BLEND);
+
+      // Restore sphere program for axis rendering.
+      Assets.useSphereProgram(gl, sphereProgram);
+      Assets.setSphereSharedUniforms(gl, sphereProgram, sharedUniforms);
+    }
+
+    // Draw axes using the dedicated axis shader.
     if (shouldRenderAxes) {
+      Assets.useAxisProgram(gl, axisProgram);
+      Assets.setAxisSharedUniforms(gl, axisProgram, sharedUniforms);
       if (shouldRenderPrimaryAxes && this.axes) {
-        this.drawAxisSet(gl, program, this.axes, this.identityModelMatrix, this.identityNormalMatrix, clipEnabled, clipRadius);
+        this.drawAxisSet(gl, axisProgram, this.axes, this.identityModelMatrix, this.identityNormalMatrix, clipEnabled, clipRadius);
       }
       if (shouldRenderSecondaryAxes && this.rotatedAxes) {
-        this.drawAxisSet(gl, program, this.rotatedAxes, this.rotatedAxisModelMatrix, this.rotatedAxisNormalMatrix, clipEnabled, clipRadius);
+        this.drawAxisSet(
+          gl,
+          axisProgram,
+          this.rotatedAxes,
+          this.rotatedAxisModelMatrix,
+          this.rotatedAxisNormalMatrix,
+          clipEnabled,
+          clipRadius,
+        );
       }
+      // Restore sphere program bindings for any subsequent draws.
+      Assets.useSphereProgram(gl, sphereProgram);
+      Assets.setSphereSharedUniforms(gl, sphereProgram, sharedUniforms);
     }
   }
 
@@ -422,6 +503,14 @@ export class App {
     for (const objectDef of segment.objects) {
       if (objectDef.type === 'twirl') {
         const mesh = this.ensureTwirlMesh();
+        const initialPhase = clamp(objectDef.initialPulsePhase ?? 0, 0, 1);
+        const phaseTriangle =
+          initialPhase < 0.5 ? initialPhase * 2 : 1 - (initialPhase - 0.5) * 2;
+        const initialTriangle =
+          objectDef.id === 'white-ring' ? 1 - phaseTriangle : phaseTriangle;
+        const initialScale =
+          objectDef.initialPulseScale ??
+          (0.25 + 0.75 * clamp(initialTriangle, 0, 1));
         this.simObjects.push({
           type: 'twirl',
           id: objectDef.id,
@@ -437,8 +526,8 @@ export class App {
           opacity: clamp(objectDef.opacity ?? 1, 0, 1),
           beltHalfAngle: Math.max(0.01, objectDef.beltHalfAngle),
           pulseSpeed: Math.max(0, objectDef.pulseSpeed),
-          pulsePhase: 0,
-          pulseScale: 0.25,
+          pulsePhase: initialPhase,
+          pulseScale: initialScale,
         });
       } else {
         const mesh = this.ensureSphereMesh();
@@ -478,14 +567,18 @@ export class App {
       if (!this.gl) {
         throw new Error('Twirl mesh requested before WebGL context initialized.');
       }
-      this.twirlMesh = Assets.createTwirlMesh(this.gl);
+      this.twirlMesh = Assets.createTwirlMesh(
+        this.gl,
+        Math.max(32, this.sphereSegments.lon * 4),
+        this.sphereSegments.lon,
+      );
     }
     return this.twirlMesh;
   }
 
   private drawAxisSet(
     gl: WebGLRenderingContext,
-    program: SphereProgram,
+    program: AxisProgram,
     axisSet: AxisSet,
     modelMatrix: Float32Array,
     normalMatrix: Float32Array,
@@ -503,32 +596,16 @@ export class App {
         continue;
       }
 
-      gl.uniformMatrix4fv(program.uniformModel, false, modelMatrix);
-      gl.uniformMatrix3fv(program.uniformNormalMatrix, false, normalMatrix);
-
-      gl.bindBuffer(gl.ARRAY_BUFFER, mesh.positionBuffer);
-      gl.vertexAttribPointer(program.attribPosition, 3, gl.FLOAT, false, 0, 0);
-      gl.enableVertexAttribArray(program.attribPosition);
-
-      gl.bindBuffer(gl.ARRAY_BUFFER, mesh.normalBuffer);
-      gl.vertexAttribPointer(program.attribNormal, 3, gl.FLOAT, false, 0, 0);
-      gl.enableVertexAttribArray(program.attribNormal);
-
-      gl.bindBuffer(gl.ARRAY_BUFFER, mesh.colorBuffer);
-      gl.vertexAttribPointer(program.attribColor, 3, gl.FLOAT, false, 0, 0);
-      gl.enableVertexAttribArray(program.attribColor);
-
-      gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, mesh.indexBuffer);
       gl.disable(gl.CULL_FACE);
       gl.enable(gl.POLYGON_OFFSET_FILL);
       gl.polygonOffset(1.0, 1.0);
-      gl.uniform1f(program.uniformUseVertexColor, 1.0);
-      gl.uniform1f(program.uniformShadingIntensity, 0.0);
-      gl.uniform3f(program.uniformPlaneVector, 0.0, 0.0, 0.0);
-      gl.uniform1f(program.uniformClipEnabled, clipEnabled ? 1.0 : 0.0);
-      gl.uniform3f(program.uniformClipCenter, 0.0, 0.0, 0.0);
-      gl.uniform1f(program.uniformClipRadius, clipRadius);
-      gl.drawElements(gl.TRIANGLES, mesh.indexCount, gl.UNSIGNED_SHORT, 0);
+      Assets.drawAxis(gl, program, mesh, {
+        modelMatrix,
+        normalMatrix,
+        clipEnabled,
+        clipCenter: this.originVector,
+        clipRadius,
+      });
       gl.disable(gl.POLYGON_OFFSET_FILL);
       gl.enable(gl.CULL_FACE);
     }
@@ -786,6 +863,17 @@ export class App {
       }
       if (oldMesh) {
         Assets.disposeSphereMesh(this.gl, oldMesh);
+      }
+      const oldTwirl = this.twirlMesh;
+      const newTwirl = Assets.createTwirlMesh(this.gl, Math.max(32, clampedLon * 4), clampedLon);
+      this.twirlMesh = newTwirl;
+      for (const simObject of this.simObjects) {
+        if (simObject.type === 'twirl') {
+          simObject.mesh = newTwirl;
+        }
+      }
+      if (oldTwirl) {
+        Assets.disposeTwirlMesh(this.gl, oldTwirl);
       }
     }
 

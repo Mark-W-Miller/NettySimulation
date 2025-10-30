@@ -25,7 +25,7 @@ export interface SphereProgram {
   uniformClipRadius: WebGLUniformLocation;
   uniformShadingIntensity: WebGLUniformLocation;
   uniformPlaneVector: WebGLUniformLocation;
-  uniformOpacityIntensity: WebGLUniformLocation;
+  uniformOpacityIntensity: WebGLUniformLocation | null;
 }
 
 export interface SphereSharedUniforms {
@@ -150,10 +150,10 @@ export function createSphereProgram(gl: WebGLRenderingContext): SphereProgram {
 
       vec3 baseColor = vColor * (ambient + (1.0 - ambient) * diffuse);
 
-      // Treat the spin axis as the shading reference; if it is degenerate, fall back to base lighting.
+      // Treat the spin axis as the shading reference; if it is degenerate, fall back to raw vertex colour.
       float axisLength = length(uPlaneVector);
       if (axisLength < 0.0001) {
-        gl_FragColor = vec4(baseColor, vAlpha);
+        gl_FragColor = vec4(vColor, vAlpha);
         return;
       }
 
@@ -281,7 +281,9 @@ export function drawSphere(
   gl.uniform3fv(sphereProgram.uniformPlaneVector, params.planeVector);
   gl.uniform4fv(sphereProgram.uniformColor, params.baseColor);
   gl.uniform1f(sphereProgram.uniformUseVertexColor, clamp01(params.vertexColorWeight));
-  gl.uniform1f(sphereProgram.uniformOpacityIntensity, clamp01(params.opacityIntensity));
+  if (sphereProgram.uniformOpacityIntensity) {
+    gl.uniform1f(sphereProgram.uniformOpacityIntensity, clamp01(params.opacityIntensity));
+  }
   gl.uniform1f(sphereProgram.uniformClipEnabled, 0.0);
 
   gl.bindBuffer(gl.ARRAY_BUFFER, mesh.positionBuffer);

@@ -26,12 +26,12 @@ panel.addTab({
   id: 'display',
   label: 'Display',
   render: () => createDisplayTab(app),
-  isDefault: true,
 });
 
 panel.addTab({
   id: 'sim',
   label: 'Sim',
+  isDefault: true,
   render: () => createSimTab(app, () => panel.setActiveTab('properties')),
 });
 
