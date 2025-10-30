@@ -40,6 +40,7 @@ export function createPropertiesTab(app: App): HTMLElement {
   type ObjectControls = {
     details: HTMLDetailsElement;
     summary: HTMLElement;
+    summaryLabel: HTMLSpanElement;
     visibilityCheckbox: HTMLInputElement;
     speedInput: HTMLInputElement;
     directionCW: HTMLInputElement;
@@ -66,34 +67,58 @@ export function createPropertiesTab(app: App): HTMLElement {
     const details = document.createElement('details');
     details.className = 'properties-object';
 
-    const summary = document.createElement('summary');
-    summary.className = 'properties-object-summary';
-    summary.textContent = simObject.id;
-    summary.addEventListener('click', () => {
-      app.selectSimObject(simObject.id);
-    });
-    details.appendChild(summary);
-
-    const form = document.createElement('div');
-    form.className = 'properties-object-form';
-
     const applyUpdate = (update: ObjectUpdate) => {
       app.selectSimObject(simObject.id);
       app.updateSelectedSimObject(update);
     };
 
-    const visibilityRow = document.createElement('label');
-    visibilityRow.className = 'properties-radio';
+    const summary = document.createElement('summary');
+    summary.className = 'properties-object-summary';
+    summary.addEventListener('click', () => {
+      app.selectSimObject(simObject.id);
+    });
+
+    const summaryLabel = document.createElement('span');
+    summaryLabel.className = 'properties-object-summary-label';
+    summaryLabel.textContent = simObject.id;
+    summary.appendChild(summaryLabel);
+
+    const visibilityToggle = document.createElement('label');
+    visibilityToggle.className = 'properties-object-visibility-toggle';
+    visibilityToggle.addEventListener('click', (event) => {
+      event.stopPropagation();
+    });
+
     const visibilityCheckbox = document.createElement('input');
     visibilityCheckbox.type = 'checkbox';
     visibilityCheckbox.checked = simObject.visible;
-    visibilityCheckbox.addEventListener('change', () => {
-      applyUpdate({ visible: visibilityCheckbox.checked });
+    visibilityCheckbox.addEventListener('click', (event) => {
+      event.stopPropagation();
     });
+    visibilityCheckbox.addEventListener('change', () => {
+      const wasOpen = details.open;
+      const nextVisible = visibilityCheckbox.checked;
+      applyUpdate({ visible: nextVisible });
+      if (!nextVisible) {
+        details.open = false;
+        openObjects.delete(simObject.id);
+      } else if (wasOpen) {
+        openObjects.add(simObject.id);
+      }
+    });
+
     const visibilityText = document.createElement('span');
     visibilityText.textContent = 'Visible';
-    visibilityRow.appendChild(visibilityCheckbox);
-    visibilityRow.appendChild(visibilityText);
+
+    visibilityToggle.appendChild(visibilityCheckbox);
+    visibilityToggle.appendChild(visibilityText);
+    summary.appendChild(visibilityToggle);
+
+    details.appendChild(summary);
+
+    const form = document.createElement('div');
+    form.className = 'properties-object-form';
+
 
     const speedGroup = document.createElement('div');
     speedGroup.className = 'properties-group';
@@ -385,7 +410,6 @@ export function createPropertiesTab(app: App): HTMLElement {
       lonInput.value = String(updated.lon);
     });
 
-    form.appendChild(visibilityRow);
     form.appendChild(speedGroup);
     form.appendChild(directionGroup);
     form.appendChild(planeGroup);
@@ -408,6 +432,7 @@ export function createPropertiesTab(app: App): HTMLElement {
     return {
       details,
       summary,
+      summaryLabel,
       visibilityCheckbox,
       speedInput,
       directionCW: directionCW.input,
@@ -439,7 +464,7 @@ export function createPropertiesTab(app: App): HTMLElement {
       controls.details.open = shouldOpen;
     }
     controls.details.classList.toggle('is-selected', simObject.id === selectedId);
-    controls.summary.textContent = simObject.id;
+    controls.summaryLabel.textContent = simObject.id;
 
     controls.visibilityCheckbox.checked = simObject.visible;
 
@@ -483,7 +508,7 @@ export function createPropertiesTab(app: App): HTMLElement {
     const simObjects = app.getSimObjects();
     const segments = app.getSphereSegments();
     const selectedId = app.getSelectedSimObject()?.id ?? null;
-    if (selectedId) {
+    if (selectedId && !objectControls.has(selectedId)) {
       openObjects.add(selectedId);
     }
 

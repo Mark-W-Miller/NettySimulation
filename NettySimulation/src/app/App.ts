@@ -1,6 +1,7 @@
 // App.ts — renders a matte sphere with custom WebGL orbit controls (no external deps)
 import {
   Assets,
+  DEFAULT_AXIS_RADIUS,
   type AxisMesh,
   type AxisSet,
   type AxisProgram,
@@ -81,7 +82,7 @@ export class App {
   private axes: AxisSet | null = null;
   private rotatedAxes: AxisSet | null = null;
   private axisVisibility: Record<'x' | 'y' | 'z', boolean> = { x: true, y: true, z: true };
-  private showSecondaryAxes = true;
+  private showSecondaryAxes = false;
   private axisOpacitySlider = 1;
   private sphereSegments = { lat: 48, lon: 48 };
   private shadingIntensity = 0.4;
@@ -230,7 +231,10 @@ export class App {
       this.sphereSegments.lon,
     );
     const axes = Assets.createAxisSet(gl);
-    const rotatedAxes = Assets.createAxisSet(gl);
+    const rotatedAxes = Assets.createAxisSet(gl, {
+      radius: DEFAULT_AXIS_RADIUS * 0.25,
+      negativeAlphaScale: 1.0,
+    });
 
     this.canvas = canvas;
     this.gl = gl;

@@ -8,6 +8,7 @@ import {
   setAxisSharedUniforms,
   drawAxis,
 } from './assets/axisAsset';
+export { DEFAULT_AXIS_RADIUS, DEFAULT_AXIS_NEGATIVE_ALPHA_SCALE } from './assets/axisAsset';
 import {
   createSphereMesh,
   disposeSphereMesh,
@@ -57,6 +58,7 @@ export type {
   AxisProgram,
   AxisSharedUniforms,
   AxisDrawParams,
+  AxisGeometryOptions,
 } from './assets/axisAsset';
 export type {
   SphereMesh,
