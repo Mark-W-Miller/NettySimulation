@@ -82,6 +82,7 @@ export class App {
   private rotatedAxes: AxisSet | null = null;
   private axisVisibility: Record<'x' | 'y' | 'z', boolean> = { x: true, y: true, z: true };
   private showSecondaryAxes = true;
+  private axisOpacity = 1;
   private sphereSegments = { lat: 48, lon: 48 };
   private shadingIntensity = 0.4;
 
@@ -475,6 +476,7 @@ export class App {
 
     // Draw axes using the dedicated axis shader.
     if (shouldRenderAxes) {
+      gl.clear(gl.DEPTH_BUFFER_BIT);
       Assets.useAxisProgram(gl, axisProgram);
       Assets.setAxisSharedUniforms(gl, axisProgram, sharedUniforms);
       if (shouldRenderPrimaryAxes && this.axes) {
@@ -612,9 +614,10 @@ export class App {
       Assets.drawAxis(gl, program, mesh, {
         modelMatrix,
         normalMatrix,
-        clipEnabled,
+        clipEnabled: false,
         clipCenter: this.originVector,
-        clipRadius,
+        clipRadius: 0,
+        opacity: this.axisOpacity,
       });
       gl.disable(gl.POLYGON_OFFSET_FILL);
       gl.enable(gl.CULL_FACE);
@@ -833,6 +836,19 @@ export class App {
       return;
     }
     this.axisVisibility[axis] = visible;
+    this.notifySimChange();
+  }
+
+  getAxisOpacity(): number {
+    return this.axisOpacity;
+  }
+
+  setAxisOpacity(value: number): void {
+    const clamped = clamp(value, 0, 1);
+    if (this.axisOpacity === clamped) {
+      return;
+    }
+    this.axisOpacity = clamped;
     this.notifySimChange();
   }
 

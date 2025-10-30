@@ -55,12 +55,41 @@ export function createDisplayTab(app: App): HTMLElement {
   container.appendChild(axisGroup);
   container.appendChild(secondaryAxesRow);
 
+  const opacityRow = document.createElement('div');
+  opacityRow.className = 'display-axis-opacity';
+
+  const opacityLabel = document.createElement('span');
+  opacityLabel.textContent = 'Axis Opacity';
+  opacityLabel.className = 'display-axis-opacity__label';
+
+  const opacityValue = document.createElement('span');
+  opacityValue.className = 'display-axis-opacity__value';
+
+  const opacitySlider = document.createElement('input');
+  opacitySlider.type = 'range';
+  opacitySlider.min = '0';
+  opacitySlider.max = '1';
+  opacitySlider.step = '0.01';
+  opacitySlider.addEventListener('input', () => {
+    const value = Number.parseFloat(opacitySlider.value);
+    opacityValue.textContent = `${Math.round(value * 100)}%`;
+    app.setAxisOpacity(value);
+  });
+
+  opacityRow.appendChild(opacityLabel);
+  opacityRow.appendChild(opacitySlider);
+  opacityRow.appendChild(opacityValue);
+  container.appendChild(opacityRow);
+
   const updateUI = () => {
     const visibility = app.getAxisVisibility();
     (['x', 'y', 'z'] as AxisKey[]).forEach((axis) => {
       checkboxes[axis].checked = visibility[axis];
     });
     secondaryCheckbox.checked = app.getSecondaryAxesVisible();
+    const opacity = app.getAxisOpacity();
+    opacitySlider.value = String(opacity);
+    opacityValue.textContent = `${Math.round(opacity * 100)}%`;
   };
 
   const unsubscribe = app.onSimChange(() => {

@@ -27,6 +27,7 @@ export interface AxisProgram {
   uniformClipEnabled: WebGLUniformLocation;
   uniformClipCenter: WebGLUniformLocation;
   uniformClipRadius: WebGLUniformLocation;
+  uniformOpacity: WebGLUniformLocation;
 }
 
 export interface AxisSharedUniforms {
@@ -41,6 +42,7 @@ export interface AxisDrawParams {
   clipEnabled: boolean;
   clipCenter: Float32Array;
   clipRadius: number;
+  opacity: number;
 }
 
 const AXIS_COLORS: Record<'x' | 'y' | 'z', [number, number, number]> = {
@@ -102,6 +104,7 @@ export function createAxisProgram(gl: WebGLRenderingContext): AxisProgram {
     uniform float uClipEnabled;
     uniform vec3 uClipCenter;
     uniform float uClipRadius;
+    uniform float uOpacity;
 
     void main() {
       if (uClipEnabled > 0.5) {
@@ -115,7 +118,7 @@ export function createAxisProgram(gl: WebGLRenderingContext): AxisProgram {
       float diffuse = max(dot(normal, normalize(uLightDirection)), 0.0);
       float ambient = 0.35;
       vec3 shaded = vColor * (ambient + (1.0 - ambient) * diffuse);
-      gl_FragColor = vec4(clamp(shaded, 0.0, 1.0), 1.0);
+      gl_FragColor = vec4(clamp(shaded, 0.0, 1.0), clamp(uOpacity, 0.0, 1.0));
     }
   `;
 
@@ -154,6 +157,7 @@ export function createAxisProgram(gl: WebGLRenderingContext): AxisProgram {
   const uniformClipEnabled = getRequiredUniform(gl, program, 'uClipEnabled');
   const uniformClipCenter = getRequiredUniform(gl, program, 'uClipCenter');
   const uniformClipRadius = getRequiredUniform(gl, program, 'uClipRadius');
+  const uniformOpacity = getRequiredUniform(gl, program, 'uOpacity');
 
   return {
     program,
@@ -168,6 +172,7 @@ export function createAxisProgram(gl: WebGLRenderingContext): AxisProgram {
     uniformClipEnabled,
     uniformClipCenter,
     uniformClipRadius,
+    uniformOpacity,
   };
 }
 
@@ -203,6 +208,7 @@ export function drawAxis(
   gl.uniform1f(axisProgram.uniformClipEnabled, params.clipEnabled ? 1.0 : 0.0);
   gl.uniform3fv(axisProgram.uniformClipCenter, params.clipCenter);
   gl.uniform1f(axisProgram.uniformClipRadius, params.clipRadius);
+  gl.uniform1f(axisProgram.uniformOpacity, params.opacity);
 
   gl.bindBuffer(gl.ARRAY_BUFFER, mesh.positionBuffer);
   gl.vertexAttribPointer(axisProgram.attribPosition, 3, gl.FLOAT, false, 0, 0);
@@ -221,8 +227,8 @@ export function drawAxis(
 }
 
 function createAxisMesh(gl: WebGLRenderingContext, axis: 'x' | 'y' | 'z'): AxisMesh {
-  const length = 3.6;
-  const radius = 0.12;
+  const length = 6.2;
+  const radius = 0.045;
   const segments = 32;
   const { positions, normals, colors, indices } = buildCylinderGeometry(axis, length, radius, segments, AXIS_COLORS[axis]);
 
