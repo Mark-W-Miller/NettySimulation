@@ -36,6 +36,10 @@ const BASE_AXIS_LENGTH = 2.0;
 const BASE_AXIS_RADIUS = DEFAULT_AXIS_RADIUS / 4;
 const BALL_RADIUS_SCALE = 1.5;
 
+export const TWIRLING_AXIS_BASE_LENGTH = BASE_AXIS_LENGTH;
+export const TWIRLING_AXIS_BASE_RADIUS = BASE_AXIS_RADIUS;
+export const TWIRLING_AXIS_BALL_SCALE = BALL_RADIUS_SCALE;
+
 export function createTwirlingAxisMesh(gl: WebGLRenderingContext): TwirlingAxisMesh {
   const geometry = buildTwirlingAxisGeometry();
   return uploadTwirlingAxisMesh(gl, geometry);

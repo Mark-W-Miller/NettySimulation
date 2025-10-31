@@ -18,8 +18,14 @@ export function createSimTab(app: App, openPropertiesTab: () => void): HTMLEleme
   stopButton.textContent = 'Stop';
   stopButton.className = 'sim-button';
 
+  const resetButton = document.createElement('button');
+  resetButton.type = 'button';
+  resetButton.textContent = 'Reset';
+  resetButton.className = 'sim-button';
+
   controls.appendChild(startButton);
   controls.appendChild(stopButton);
+  controls.appendChild(resetButton);
 
   const speedGroup = document.createElement('div');
   speedGroup.className = 'sim-speed-group';
@@ -119,6 +125,11 @@ export function createSimTab(app: App, openPropertiesTab: () => void): HTMLEleme
 
   stopButton.addEventListener('click', () => {
     app.stopSimulation();
+    updateUI();
+  });
+
+  resetButton.addEventListener('click', () => {
+    app.resetSimulation();
     updateUI();
   });
 

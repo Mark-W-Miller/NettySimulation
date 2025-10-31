@@ -11,6 +11,12 @@ import {
   type TwirlProgram,
   type TwirlingAxisMesh,
 } from '../engine/Assets';
+import { AXIS_COLORS } from '../engine/assets/axisAsset';
+import {
+  TWIRLING_AXIS_BASE_LENGTH,
+  TWIRLING_AXIS_BASE_RADIUS,
+  TWIRLING_AXIS_BALL_SCALE,
+} from '../engine/assets/twirlingAxisAsset';
 import {
   type BaseColor,
   type SphereObjectDefinition,
@@ -34,6 +40,8 @@ import {
   mat4ScaleUniform,
   normalizeVec3,
 } from './math3d';
+
+const MAX_GHOST_PARTICLES = 4000;
 
 interface BaseSimObject {
   id: string;
@@ -83,6 +91,13 @@ interface TwirlingAxisObject {
 
 type SimObject = SphereObject | TwirlObject | TwirlingAxisObject;
 
+interface GhostParticle {
+  position: Float32Array;
+  color: Float32Array;
+  radius: number;
+  opacity: number;
+}
+
 type SimObjectUpdatePayload = Partial<{
   speedPerTick: number;
   direction: 1 | -1;
@@ -123,6 +138,8 @@ export class App {
   private axisRadiusScale = 1;
   private sphereSegments = { lat: 48, lon: 48 };
   private shadingIntensity = 0.4;
+  private ghostParticles: GhostParticle[] = [];
+  private ghostBeatAccumulator = 0;
 
   private readonly camera = new CameraController();
   private readonly identityModelMatrix = mat4Identity();
@@ -391,6 +408,8 @@ export class App {
     this.twirlingAxisMesh = null;
     this.axes = null;
     this.rotatedAxes = null;
+    this.ghostParticles = [];
+    this.ghostBeatAccumulator = 0;
     this.simObjects.length = 0;
     this.simRunning = false;
     this.selectedObjectId = null;
@@ -509,6 +528,10 @@ export class App {
       }
     }
 
+    if (beats > 0 && twirlingAxisQueue.length > 0) {
+      this.spawnGhostParticles(beats, twirlingAxisQueue);
+    }
+
     for (const sphereObject of sphereQueue) {
       const { modelMatrix, normalMatrix } = this.computeModelMatrices(sphereObject);
       Assets.drawSphere(gl, sphereProgram, sphereObject.mesh, {
@@ -555,6 +578,8 @@ export class App {
       Assets.useSphereProgram(gl, sphereProgram);
       Assets.setSphereSharedUniforms(gl, sphereProgram, sharedUniforms);
     }
+
+    this.drawGhostParticles(gl, sphereProgram);
 
     if (twirlingAxisQueue.length > 0) {
       Assets.useAxisProgram(gl, axisProgram);
@@ -620,6 +645,9 @@ export class App {
     if (!this.gl) {
       return;
     }
+
+    this.ghostParticles = [];
+    this.ghostBeatAccumulator = 0;
 
     this.simObjects.length = 0;
     for (const objectDef of segment.objects) {
@@ -773,6 +801,20 @@ export class App {
   stopSimulation(): void {
     if (this.simRunning) {
       this.simRunning = false;
+      this.notifySimChange();
+    }
+  }
+
+  resetSimulation(): void {
+    const targetSegment = this.selectedSegmentId ?? this.segmentDefinitions[0]?.id ?? null;
+    this.stopSimulation();
+    this.ghostParticles = [];
+    this.ghostBeatAccumulator = 0;
+    if (targetSegment) {
+      this.loadSegment(targetSegment);
+    } else {
+      this.simObjects.length = 0;
+      this.selectedObjectId = null;
       this.notifySimChange();
     }
   }
@@ -1035,6 +1077,98 @@ export class App {
     if (previousSecondary) {
       Assets.disposeAxisSet(gl, previousSecondary);
     }
+  }
+
+  private spawnGhostParticles(beats: number, axisObjects: TwirlingAxisObject[]): void {
+    if (!this.simRunning || beats <= 0) {
+      return;
+    }
+
+    this.ghostBeatAccumulator += beats;
+    const spawnIterations = Math.floor(this.ghostBeatAccumulator);
+    if (spawnIterations <= 0) {
+      return;
+    }
+    this.ghostBeatAccumulator -= spawnIterations;
+
+    const halfLength = TWIRLING_AXIS_BASE_LENGTH / 2;
+
+    for (let iteration = 0; iteration < spawnIterations; iteration += 1) {
+      for (const axisObject of axisObjects) {
+        if (!axisObject.visible) {
+          continue;
+        }
+        const { modelMatrix } = this.computeTwirlingAxisMatrices(axisObject);
+        const sizeScale = Math.max(0.01, axisObject.size);
+        const ballRadius = TWIRLING_AXIS_BASE_RADIUS * TWIRLING_AXIS_BALL_SCALE * sizeScale;
+        const ghostOpacity = clamp(axisObject.opacity * 0.6, 0.05, 1);
+
+        const xTip = this.transformPoint(modelMatrix, [halfLength, 0, 0]);
+        const yTip = this.transformPoint(modelMatrix, [0, halfLength, 0]);
+
+        this.addGhostParticle(xTip, AXIS_COLORS.x, ballRadius, ghostOpacity);
+        this.addGhostParticle(yTip, AXIS_COLORS.y, ballRadius, ghostOpacity);
+      }
+    }
+  }
+
+  private addGhostParticle(position: Float32Array, color: [number, number, number], radius: number, opacity: number): void {
+    this.ghostParticles.push({
+      position,
+      color: new Float32Array(color),
+      radius,
+      opacity,
+    });
+
+    if (this.ghostParticles.length > MAX_GHOST_PARTICLES) {
+      this.ghostParticles.splice(0, this.ghostParticles.length - MAX_GHOST_PARTICLES);
+    }
+  }
+
+  private drawGhostParticles(gl: WebGLRenderingContext, sphereProgram: SphereProgram): void {
+    if (this.ghostParticles.length === 0) {
+      return;
+    }
+
+    const mesh = this.ensureSphereMesh();
+    const planeVector = new Float32Array([0, 1, 0]);
+
+    gl.enable(gl.BLEND);
+    gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+
+    for (const ghost of this.ghostParticles) {
+      const modelMatrix = this.makeTranslationScaleMatrix(ghost.position, ghost.radius);
+      const baseColor = new Float32Array([ghost.color[0], ghost.color[1], ghost.color[2], ghost.opacity]);
+
+      Assets.drawSphere(gl, sphereProgram, mesh, {
+        modelMatrix,
+        normalMatrix: this.identityNormalMatrix,
+        shadingIntensity: 0.1,
+        planeVector,
+        baseColor,
+        vertexColorWeight: 0,
+        opacityIntensity: ghost.opacity,
+      });
+    }
+
+    gl.disable(gl.BLEND);
+  }
+
+  private transformPoint(matrix: Float32Array, point: [number, number, number]): Float32Array {
+    const [x, y, z] = point;
+    const outX = matrix[0] * x + matrix[4] * y + matrix[8] * z + matrix[12];
+    const outY = matrix[1] * x + matrix[5] * y + matrix[9] * z + matrix[13];
+    const outZ = matrix[2] * x + matrix[6] * y + matrix[10] * z + matrix[14];
+    return new Float32Array([outX, outY, outZ]);
+  }
+
+  private makeTranslationScaleMatrix(position: Float32Array, scale: number): Float32Array {
+    const translation = mat4Identity();
+    translation[12] = position[0];
+    translation[13] = position[1];
+    translation[14] = position[2];
+    const scaleMatrix = mat4ScaleUniform(scale);
+    return mat4Multiply(translation, scaleMatrix);
   }
 
   getAxisVisibility(): Readonly<Record<'x' | 'y' | 'z', boolean>> {
