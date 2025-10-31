@@ -45,20 +45,24 @@ export function createPropertiesTab(app: App): HTMLElement {
     speedInput: HTMLInputElement;
     directionCW: HTMLInputElement;
     directionCCW: HTMLInputElement;
-    planeYG: HTMLInputElement;
-    planeGB: HTMLInputElement;
-  planeYB: HTMLInputElement;
-  shellInput: HTMLInputElement;
-  baseColorSelect: HTMLSelectElement;
-  shadingSlider: HTMLInputElement;
-  shadingValue: HTMLSpanElement;
-  opacitySlider: HTMLInputElement;
-  opacityValue: HTMLSpanElement;
-  latInput: HTMLInputElement;
-  lonInput: HTMLInputElement;
-  beltInput?: HTMLInputElement;
-  pulseInput?: HTMLInputElement;
-};
+    planeYG?: HTMLInputElement;
+    planeGB?: HTMLInputElement;
+    planeYB?: HTMLInputElement;
+    shellInput?: HTMLInputElement;
+    baseColorSelect?: HTMLSelectElement;
+    shadingSlider?: HTMLInputElement;
+    shadingValue?: HTMLSpanElement;
+    opacitySlider?: HTMLInputElement;
+    opacityValue?: HTMLSpanElement;
+    latInput: HTMLInputElement;
+    lonInput: HTMLInputElement;
+    beltInput?: HTMLInputElement;
+    pulseInput?: HTMLInputElement;
+    spinXCheckbox?: HTMLInputElement;
+    spinYCheckbox?: HTMLInputElement;
+    spinZCheckbox?: HTMLInputElement;
+    sizeInput?: HTMLInputElement;
+  };
 
   const objectControls = new Map<string, ObjectControls>();
   const openObjects = new Set<string>();
@@ -119,6 +123,8 @@ export function createPropertiesTab(app: App): HTMLElement {
     const form = document.createElement('div');
     form.className = 'properties-object-form';
 
+    const isTwirlingAxis = simObject.type === 'twirling-axis';
+
 
     const speedGroup = document.createElement('div');
     speedGroup.className = 'properties-group';
@@ -169,80 +175,214 @@ export function createPropertiesTab(app: App): HTMLElement {
     directionGroup.appendChild(directionCW.wrapper);
     directionGroup.appendChild(directionCCW.wrapper);
 
-    const planeGroup = document.createElement('fieldset');
-    planeGroup.className = 'properties-fieldset';
-    const planeLegend = document.createElement('legend');
-    planeLegend.textContent = 'Spin Plane';
-    planeGroup.appendChild(planeLegend);
-    const planeGroupName = `properties-plane-${simObject.id}`;
-    const planeYG = createRadio(planeGroupName, 'YG', 'Spin about B axis (YG)');
-    const planeGB = createRadio(planeGroupName, 'GB', 'Spin about Y axis (GB)');
-    const planeYB = createRadio(planeGroupName, 'YB', 'Spin about G axis (YB)');
-    planeYG.input.addEventListener('change', () => {
-      if (planeYG.input.checked) {
-        applyUpdate({ plane: 'YG' });
-      }
-    });
-    planeGB.input.addEventListener('change', () => {
-      if (planeGB.input.checked) {
-        applyUpdate({ plane: 'GB' });
-      }
-    });
-    planeYB.input.addEventListener('change', () => {
-      if (planeYB.input.checked) {
-        applyUpdate({ plane: 'YB' });
-      }
-    });
-    planeGroup.appendChild(planeYG.wrapper);
-    planeGroup.appendChild(planeGB.wrapper);
-    planeGroup.appendChild(planeYB.wrapper);
+    let planeYG: ReturnType<typeof createRadio> | undefined;
+    let planeGB: ReturnType<typeof createRadio> | undefined;
+    let planeYB: ReturnType<typeof createRadio> | undefined;
+    let shellInput: HTMLInputElement | undefined;
+    let baseColorSelect: HTMLSelectElement | undefined;
+    let opacitySlider: HTMLInputElement | undefined;
+    let opacityValue: HTMLSpanElement | undefined;
+    let shadingSlider: HTMLInputElement | undefined;
+    let shadingValue: HTMLSpanElement | undefined;
 
-    const shellGroup = document.createElement('div');
-    shellGroup.className = 'properties-group';
-    const shellLabel = document.createElement('label');
-    shellLabel.className = 'properties-label';
-    shellLabel.textContent = 'Shell Size';
-    shellLabel.htmlFor = `properties-shell-${simObject.id}`;
-    const shellInput = document.createElement('input');
-    shellInput.type = 'number';
-    shellInput.id = `properties-shell-${simObject.id}`;
-    shellInput.min = '1';
-    shellInput.step = '1';
-    shellInput.className = 'properties-number properties-number--compact';
-    shellInput.value = String(simObject.shellSize);
-    shellInput.dataset.prev = shellInput.value;
-    shellInput.addEventListener('change', () => {
-      const size = Number.parseInt(shellInput.value, 10);
-      const previous = Number.parseInt(shellInput.dataset.prev ?? '1', 10);
-      const next = Number.isFinite(size) ? Math.max(1, size) : previous;
-      shellInput.value = String(next);
+    if (!isTwirlingAxis) {
+      const planeGroup = document.createElement('fieldset');
+      planeGroup.className = 'properties-fieldset';
+      const planeLegend = document.createElement('legend');
+      planeLegend.textContent = 'Spin Plane';
+      planeGroup.appendChild(planeLegend);
+      const planeGroupName = `properties-plane-${simObject.id}`;
+      planeYG = createRadio(planeGroupName, 'YG', 'Spin about B axis (YG)');
+      planeGB = createRadio(planeGroupName, 'GB', 'Spin about Y axis (GB)');
+      planeYB = createRadio(planeGroupName, 'YB', 'Spin about G axis (YB)');
+      planeYG.input.addEventListener('change', () => {
+        if (planeYG && planeYG.input.checked) {
+          applyUpdate({ plane: 'YG' });
+        }
+      });
+      planeGB.input.addEventListener('change', () => {
+        if (planeGB && planeGB.input.checked) {
+          applyUpdate({ plane: 'GB' });
+        }
+      });
+      planeYB.input.addEventListener('change', () => {
+        if (planeYB && planeYB.input.checked) {
+          applyUpdate({ plane: 'YB' });
+        }
+      });
+      planeGroup.appendChild(planeYG.wrapper);
+      planeGroup.appendChild(planeGB.wrapper);
+      planeGroup.appendChild(planeYB.wrapper);
+
+      const shellGroup = document.createElement('div');
+      shellGroup.className = 'properties-group';
+      const shellLabel = document.createElement('label');
+      shellLabel.className = 'properties-label';
+      shellLabel.textContent = 'Shell Size';
+      shellLabel.htmlFor = `properties-shell-${simObject.id}`;
+      shellInput = document.createElement('input');
+      shellInput.type = 'number';
+      shellInput.id = `properties-shell-${simObject.id}`;
+      shellInput.min = '1';
+      shellInput.step = '1';
+      shellInput.className = 'properties-number properties-number--compact';
+      shellInput.value = String(simObject.shellSize);
       shellInput.dataset.prev = shellInput.value;
-      applyUpdate({ shellSize: next });
-    });
-    shellGroup.appendChild(shellLabel);
-    shellGroup.appendChild(shellInput);
+      shellInput.addEventListener('change', () => {
+        if (!shellInput) {
+          return;
+        }
+        const size = Number.parseInt(shellInput.value, 10);
+        const previous = Number.parseInt(shellInput.dataset.prev ?? '1', 10);
+        const next = Number.isFinite(size) ? Math.max(1, size) : previous;
+        shellInput.value = String(next);
+        shellInput.dataset.prev = shellInput.value;
+        applyUpdate({ shellSize: next });
+      });
+      shellGroup.appendChild(shellLabel);
+      shellGroup.appendChild(shellInput);
 
-    const baseColorGroup = document.createElement('div');
-    baseColorGroup.className = 'properties-group';
-    const baseColorLabel = document.createElement('label');
-    baseColorLabel.className = 'properties-label';
-    baseColorLabel.textContent = 'Base Color';
-    baseColorLabel.htmlFor = `properties-base-color-${simObject.id}`;
-    const baseColorSelect = document.createElement('select');
-    baseColorSelect.id = `properties-base-color-${simObject.id}`;
-    baseColorSelect.className = 'properties-select';
-    BASE_COLOR_OPTIONS.forEach((option) => {
-      const opt = document.createElement('option');
-      opt.value = option.value;
-      opt.textContent = option.label;
-      baseColorSelect.appendChild(opt);
-    });
-    baseColorSelect.value = simObject.baseColor;
-    baseColorSelect.addEventListener('change', () => {
-      applyUpdate({ baseColor: baseColorSelect.value as ObjectUpdate['baseColor'] });
-    });
-    baseColorGroup.appendChild(baseColorLabel);
-    baseColorGroup.appendChild(baseColorSelect);
+      const baseColorGroup = document.createElement('div');
+      baseColorGroup.className = 'properties-group';
+      const baseColorLabel = document.createElement('label');
+      baseColorLabel.className = 'properties-label';
+      baseColorLabel.textContent = 'Base Color';
+      baseColorLabel.htmlFor = `properties-base-color-${simObject.id}`;
+      baseColorSelect = document.createElement('select');
+      baseColorSelect.id = `properties-base-color-${simObject.id}`;
+      baseColorSelect.className = 'properties-select';
+      BASE_COLOR_OPTIONS.forEach((option) => {
+        const opt = document.createElement('option');
+        opt.value = option.value;
+        opt.textContent = option.label;
+        baseColorSelect!.appendChild(opt);
+      });
+      baseColorSelect.value = simObject.baseColor;
+      baseColorSelect.addEventListener('change', () => {
+        applyUpdate({ baseColor: baseColorSelect!.value as ObjectUpdate['baseColor'] });
+      });
+      baseColorGroup.appendChild(baseColorLabel);
+      baseColorGroup.appendChild(baseColorSelect);
+
+      form.appendChild(planeGroup);
+      form.appendChild(shellGroup);
+      form.appendChild(baseColorGroup);
+    }
+
+    let spinXCheckbox: HTMLInputElement | undefined;
+    let spinYCheckbox: HTMLInputElement | undefined;
+    let spinZCheckbox: HTMLInputElement | undefined;
+    let sizeInput: HTMLInputElement | undefined;
+
+    if (isTwirlingAxis) {
+      const axisSim = simObject as SimObjectView & {
+        spinX?: boolean;
+        spinY?: boolean;
+        spinZ?: boolean;
+        size?: number;
+        opacity?: number;
+      };
+
+      const spinGroup = document.createElement('fieldset');
+      spinGroup.className = 'properties-fieldset';
+      const spinLegend = document.createElement('legend');
+      spinLegend.textContent = 'Active Axes';
+      spinGroup.appendChild(spinLegend);
+
+      const createSpinControl = (labelText: string, key: 'spinX' | 'spinY' | 'spinZ') => {
+        const label = document.createElement('label');
+        label.className = 'properties-radio';
+        const input = document.createElement('input');
+        input.type = 'checkbox';
+        input.checked = axisSim[key] ?? false;
+        input.addEventListener('change', () => {
+          switch (key) {
+            case 'spinX':
+              applyUpdate({ spinX: input.checked } as ObjectUpdate);
+              break;
+            case 'spinY':
+              applyUpdate({ spinY: input.checked } as ObjectUpdate);
+              break;
+            case 'spinZ':
+              applyUpdate({ spinZ: input.checked } as ObjectUpdate);
+              break;
+          }
+        });
+        const span = document.createElement('span');
+        span.textContent = labelText;
+        label.appendChild(input);
+        label.appendChild(span);
+        spinGroup.appendChild(label);
+        return input;
+      };
+
+      spinXCheckbox = createSpinControl('Spin about X axis', 'spinX');
+      spinYCheckbox = createSpinControl('Spin about Y axis', 'spinY');
+      spinZCheckbox = createSpinControl('Spin about Z axis', 'spinZ');
+
+      const sizeGroup = document.createElement('div');
+      sizeGroup.className = 'properties-group';
+      const sizeLabel = document.createElement('label');
+      sizeLabel.className = 'properties-label';
+      sizeLabel.textContent = 'Size Scale';
+      sizeLabel.htmlFor = `properties-size-${simObject.id}`;
+      sizeInput = document.createElement('input');
+      sizeInput.type = 'number';
+      sizeInput.id = `properties-size-${simObject.id}`;
+      sizeInput.min = '0.1';
+      sizeInput.step = '0.1';
+      sizeInput.className = 'properties-number properties-number--compact';
+      sizeInput.value = (axisSim.size ?? 1).toFixed(2);
+      sizeInput.dataset.prev = sizeInput.value;
+      sizeInput.addEventListener('change', () => {
+        if (!sizeInput) {
+          return;
+        }
+        const raw = Number.parseFloat(sizeInput.value);
+        const previous = Number.parseFloat(sizeInput.dataset.prev ?? '1');
+        const next = Number.isFinite(raw) ? Math.max(0.1, raw) : previous;
+        sizeInput.value = next.toFixed(2);
+        sizeInput.dataset.prev = sizeInput.value;
+        applyUpdate({ size: next } as ObjectUpdate);
+      });
+      sizeGroup.appendChild(sizeLabel);
+      sizeGroup.appendChild(sizeInput);
+
+      const axisOpacityGroup = document.createElement('div');
+      axisOpacityGroup.className = 'properties-group';
+      const axisOpacityLabel = document.createElement('label');
+      axisOpacityLabel.className = 'properties-label';
+      axisOpacityLabel.textContent = 'Axis Opacity';
+      axisOpacityLabel.htmlFor = `properties-axis-opacity-${simObject.id}`;
+      opacitySlider = document.createElement('input');
+      opacitySlider.type = 'range';
+      opacitySlider.id = `properties-axis-opacity-${simObject.id}`;
+      opacitySlider.min = '0';
+      opacitySlider.max = '1';
+      opacitySlider.step = '0.05';
+      opacitySlider.className = 'sim-speed-slider';
+      opacitySlider.value = (axisSim.opacity ?? 1).toFixed(2);
+      opacityValue = document.createElement('span');
+      opacityValue.className = 'properties-shading-value';
+      opacityValue.textContent = (axisSim.opacity ?? 1).toFixed(2);
+      opacitySlider.addEventListener('input', () => {
+        if (!opacitySlider || !opacityValue) {
+          return;
+        }
+        const value = Number.parseFloat(opacitySlider.value);
+        const clamped = Number.isFinite(value) ? Math.min(Math.max(value, 0), 1) : axisSim.opacity ?? 1;
+        opacitySlider.value = clamped.toFixed(2);
+        opacityValue.textContent = clamped.toFixed(2);
+        applyUpdate({ opacity: clamped } as ObjectUpdate);
+      });
+      axisOpacityGroup.appendChild(axisOpacityLabel);
+      axisOpacityGroup.appendChild(opacitySlider);
+      axisOpacityGroup.appendChild(opacityValue);
+
+      form.appendChild(spinGroup);
+      form.appendChild(sizeGroup);
+      form.appendChild(axisOpacityGroup);
+    }
 
     let beltInput: HTMLInputElement | undefined;
     let pulseInput: HTMLInputElement | undefined;
@@ -296,63 +436,74 @@ export function createPropertiesTab(app: App): HTMLElement {
       form.appendChild(pulseGroup);
     }
 
-    const opacityGroup = document.createElement('div');
-    opacityGroup.className = 'properties-group';
-    const opacityLabel = document.createElement('label');
-    opacityLabel.className = 'properties-label';
-    opacityLabel.textContent = 'Opacity Gradient';
-    opacityLabel.htmlFor = `properties-opacity-${simObject.id}`;
-    const opacitySlider = document.createElement('input');
-    opacitySlider.type = 'range';
-    opacitySlider.id = `properties-opacity-${simObject.id}`;
-    opacitySlider.min = '0';
-    opacitySlider.max = '1';
-    opacitySlider.step = '0.05';
-    opacitySlider.className = 'sim-speed-slider';
-    opacitySlider.value = simObject.opacity.toString();
-    const opacityValue = document.createElement('span');
-    opacityValue.className = 'properties-shading-value';
-    opacityValue.textContent = simObject.opacity.toFixed(2);
-    opacitySlider.addEventListener('input', () => {
-      const value = Number.parseFloat(opacitySlider.value);
-      const clamped = Number.isFinite(value) ? value : simObject.opacity;
-      opacityValue.textContent = clamped.toFixed(2);
-      applyUpdate({ opacity: clamped });
-    });
-    opacityGroup.appendChild(opacityLabel);
-    opacityGroup.appendChild(opacitySlider);
-    opacityGroup.appendChild(opacityValue);
+    if (!isTwirlingAxis) {
+      const opacityGroup = document.createElement('div');
+      opacityGroup.className = 'properties-group';
+      const opacityLabel = document.createElement('label');
+      opacityLabel.className = 'properties-label';
+      opacityLabel.textContent = 'Opacity Gradient';
+      opacityLabel.htmlFor = `properties-opacity-${simObject.id}`;
+      opacitySlider = document.createElement('input');
+      opacitySlider.type = 'range';
+      opacitySlider.id = `properties-opacity-${simObject.id}`;
+      opacitySlider.min = '0';
+      opacitySlider.max = '1';
+      opacitySlider.step = '0.05';
+      opacitySlider.className = 'sim-speed-slider';
+      opacitySlider.value = simObject.opacity.toString();
+      opacityValue = document.createElement('span');
+      opacityValue.className = 'properties-shading-value';
+      opacityValue.textContent = simObject.opacity.toFixed(2);
+      opacitySlider.addEventListener('input', () => {
+        if (!opacitySlider || !opacityValue) {
+          return;
+        }
+        const value = Number.parseFloat(opacitySlider.value);
+        const clamped = Number.isFinite(value) ? value : simObject.opacity;
+        opacityValue.textContent = clamped.toFixed(2);
+        applyUpdate({ opacity: clamped });
+      });
+      opacityGroup.appendChild(opacityLabel);
+      opacityGroup.appendChild(opacitySlider);
+      opacityGroup.appendChild(opacityValue);
 
-    const shadingGroup = document.createElement('div');
-    shadingGroup.className = 'properties-group';
-    const shadingLabel = document.createElement('label');
-    shadingLabel.className = 'properties-label';
-    shadingLabel.textContent = 'Shading Intensity';
-    shadingLabel.htmlFor = `properties-shading-${simObject.id}`;
-    const shadingSlider = document.createElement('input');
-    shadingSlider.type = 'range';
-    shadingSlider.id = `properties-shading-${simObject.id}`;
-    shadingSlider.min = '0';
-    shadingSlider.max = '1';
-    shadingSlider.step = '0.05';
-    shadingSlider.className = 'sim-speed-slider';
-    const shadingValue = document.createElement('span');
-    shadingValue.className = 'properties-shading-value';
-    const initialShading = simObject.shadingIntensity ?? app.getShadingIntensity();
-    shadingSlider.value = initialShading.toString();
-    shadingValue.textContent = initialShading.toFixed(2);
-    shadingSlider.addEventListener('input', () => {
-      const value = Number.parseFloat(shadingSlider.value);
-      const fallback = simObject.shadingIntensity ?? app.getShadingIntensity();
-      const clamped = Number.isFinite(value) ? Math.min(Math.max(value, 0), 1) : fallback;
-      shadingSlider.value = clamped.toString();
-      shadingValue.textContent = clamped.toFixed(2);
-      app.selectSimObject(simObject.id);
-      app.setShadingIntensity(clamped);
-    });
-    shadingGroup.appendChild(shadingLabel);
-    shadingGroup.appendChild(shadingSlider);
-    shadingGroup.appendChild(shadingValue);
+      const shadingGroup = document.createElement('div');
+      shadingGroup.className = 'properties-group';
+      const shadingLabel = document.createElement('label');
+      shadingLabel.className = 'properties-label';
+      shadingLabel.textContent = 'Shading Intensity';
+      shadingLabel.htmlFor = `properties-shading-${simObject.id}`;
+      shadingSlider = document.createElement('input');
+      shadingSlider.type = 'range';
+      shadingSlider.id = `properties-shading-${simObject.id}`;
+      shadingSlider.min = '0';
+      shadingSlider.max = '1';
+      shadingSlider.step = '0.05';
+      shadingSlider.className = 'sim-speed-slider';
+      shadingValue = document.createElement('span');
+      shadingValue.className = 'properties-shading-value';
+      const initialShading = simObject.shadingIntensity ?? app.getShadingIntensity();
+      shadingSlider.value = initialShading.toString();
+      shadingValue.textContent = initialShading.toFixed(2);
+      shadingSlider.addEventListener('input', () => {
+        if (!shadingSlider || !shadingValue) {
+          return;
+        }
+        const value = Number.parseFloat(shadingSlider.value);
+        const fallback = simObject.shadingIntensity ?? app.getShadingIntensity();
+        const clamped = Number.isFinite(value) ? Math.min(Math.max(value, 0), 1) : fallback;
+        shadingSlider.value = clamped.toString();
+        shadingValue.textContent = clamped.toFixed(2);
+        app.selectSimObject(simObject.id);
+        app.setShadingIntensity(clamped);
+      });
+      shadingGroup.appendChild(shadingLabel);
+      shadingGroup.appendChild(shadingSlider);
+      shadingGroup.appendChild(shadingValue);
+
+      form.appendChild(opacityGroup);
+      form.appendChild(shadingGroup);
+    }
 
     const segmentsGroup = document.createElement('div');
     segmentsGroup.className = 'properties-group';
@@ -412,11 +563,6 @@ export function createPropertiesTab(app: App): HTMLElement {
 
     form.appendChild(speedGroup);
     form.appendChild(directionGroup);
-    form.appendChild(planeGroup);
-    form.appendChild(shellGroup);
-    form.appendChild(baseColorGroup);
-    form.appendChild(opacityGroup);
-    form.appendChild(shadingGroup);
     form.appendChild(segmentsGroup);
     details.appendChild(form);
 
@@ -437,9 +583,9 @@ export function createPropertiesTab(app: App): HTMLElement {
       speedInput,
       directionCW: directionCW.input,
       directionCCW: directionCCW.input,
-      planeYG: planeYG.input,
-      planeGB: planeGB.input,
-      planeYB: planeYB.input,
+      planeYG: planeYG?.input,
+      planeGB: planeGB?.input,
+      planeYB: planeYB?.input,
       shellInput,
       baseColorSelect,
       shadingSlider,
@@ -450,6 +596,10 @@ export function createPropertiesTab(app: App): HTMLElement {
       lonInput,
       beltInput,
       pulseInput,
+      spinXCheckbox,
+      spinYCheckbox,
+      spinZCheckbox,
+      sizeInput,
     };
   };
 
@@ -474,21 +624,32 @@ export function createPropertiesTab(app: App): HTMLElement {
     controls.directionCW.checked = simObject.direction >= 0;
     controls.directionCCW.checked = simObject.direction < 0;
 
-    controls.planeYG.checked = simObject.plane === 'YG';
-    controls.planeGB.checked = simObject.plane === 'GB';
-    controls.planeYB.checked = simObject.plane === 'YB';
+    if (controls.planeYG && controls.planeGB && controls.planeYB && simObject.type !== 'twirling-axis') {
+      controls.planeYG.checked = simObject.plane === 'YG';
+      controls.planeGB.checked = simObject.plane === 'GB';
+      controls.planeYB.checked = simObject.plane === 'YB';
+    }
 
-    controls.shellInput.value = String(simObject.shellSize);
-    controls.shellInput.dataset.prev = controls.shellInput.value;
+    if (controls.shellInput && simObject.type !== 'twirling-axis') {
+      controls.shellInput.value = String(simObject.shellSize);
+      controls.shellInput.dataset.prev = controls.shellInput.value;
+    }
 
-    controls.baseColorSelect.value = simObject.baseColor;
+    if (controls.baseColorSelect && simObject.type !== 'twirling-axis') {
+      controls.baseColorSelect.value = simObject.baseColor;
+    }
 
-    const shading = simObject.shadingIntensity ?? app.getShadingIntensity();
-    controls.shadingSlider.value = shading.toString();
-    controls.shadingValue.textContent = shading.toFixed(2);
+    if (controls.shadingSlider && controls.shadingValue && simObject.type !== 'twirling-axis') {
+      const shading = simObject.shadingIntensity ?? app.getShadingIntensity();
+      controls.shadingSlider.value = shading.toString();
+      controls.shadingValue.textContent = shading.toFixed(2);
+    }
 
-    controls.opacitySlider.value = simObject.opacity.toString();
-    controls.opacityValue.textContent = simObject.opacity.toFixed(2);
+    if (controls.opacitySlider && controls.opacityValue) {
+      const opacity = simObject.type === 'twirling-axis' ? simObject.opacity : simObject.opacity;
+      controls.opacitySlider.value = opacity.toFixed(2);
+      controls.opacityValue.textContent = opacity.toFixed(2);
+    }
 
     if (controls.beltInput) {
       const beltValue = simObject.type === 'twirl' ? simObject.beltHalfAngle : 0;
@@ -498,6 +659,24 @@ export function createPropertiesTab(app: App): HTMLElement {
     if (controls.pulseInput) {
       const pulseValue = simObject.type === 'twirl' ? simObject.pulseSpeed : 0;
       controls.pulseInput.value = pulseValue.toFixed(2);
+    }
+
+    if (controls.spinXCheckbox) {
+      controls.spinXCheckbox.checked = simObject.type === 'twirling-axis' ? simObject.spinX : false;
+    }
+
+    if (controls.spinYCheckbox) {
+      controls.spinYCheckbox.checked = simObject.type === 'twirling-axis' ? simObject.spinY : false;
+    }
+
+    if (controls.spinZCheckbox) {
+      controls.spinZCheckbox.checked = simObject.type === 'twirling-axis' ? simObject.spinZ : false;
+    }
+
+    if (controls.sizeInput) {
+      const value = simObject.type === 'twirling-axis' ? simObject.size : 1;
+      controls.sizeInput.value = value.toFixed(2);
+      controls.sizeInput.dataset.prev = controls.sizeInput.value;
     }
 
     controls.latInput.value = String(segments.lat);

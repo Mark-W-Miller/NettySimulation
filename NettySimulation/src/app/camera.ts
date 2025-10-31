@@ -136,7 +136,7 @@ export class CameraController {
       event.preventDefault();
       const zoomSensitivity = 0.0018;
       const nextDistance = this.state.distance + event.deltaY * zoomSensitivity;
-      this.state.distance = clamp(nextDistance, 0.15, 12);
+      this.state.distance = clamp(nextDistance, 0.15, 192);
       this.onChange();
     };
 

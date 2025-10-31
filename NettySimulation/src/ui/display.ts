@@ -81,6 +81,32 @@ export function createDisplayTab(app: App): HTMLElement {
   opacityRow.appendChild(opacityValue);
   container.appendChild(opacityRow);
 
+  const radiusRow = document.createElement('div');
+  radiusRow.className = 'display-axis-radius';
+
+  const radiusLabel = document.createElement('span');
+  radiusLabel.className = 'display-axis-opacity__label';
+  radiusLabel.textContent = 'Axis Radius Scale';
+
+  const radiusInput = document.createElement('input');
+  radiusInput.type = 'number';
+  radiusInput.min = '1';
+  radiusInput.max = '64';
+  radiusInput.step = '1';
+  radiusInput.className = 'display-axis-radius__input';
+  radiusInput.addEventListener('change', () => {
+    const previous = Number.parseInt(radiusInput.dataset.prev ?? '1', 10);
+    const raw = Number.parseInt(radiusInput.value, 10);
+    const clamped = Number.isFinite(raw) ? Math.max(1, Math.min(64, raw)) : previous;
+    radiusInput.value = String(clamped);
+    radiusInput.dataset.prev = radiusInput.value;
+    app.setAxisRadiusScale(clamped);
+  });
+
+  radiusRow.appendChild(radiusLabel);
+  radiusRow.appendChild(radiusInput);
+  container.appendChild(radiusRow);
+
   const updateUI = () => {
     const visibility = app.getAxisVisibility();
     (['x', 'y', 'z'] as AxisKey[]).forEach((axis) => {
@@ -90,6 +116,9 @@ export function createDisplayTab(app: App): HTMLElement {
     const opacity = app.getAxisOpacity();
     opacitySlider.value = String(opacity);
     opacityValue.textContent = `${Math.round(opacity * 100)}%`;
+    const axisRadiusScale = app.getAxisRadiusScale();
+    radiusInput.value = String(axisRadiusScale);
+    radiusInput.dataset.prev = radiusInput.value;
   };
 
   const unsubscribe = app.onSimChange(() => {

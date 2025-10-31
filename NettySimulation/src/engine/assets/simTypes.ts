@@ -44,4 +44,23 @@ export interface TwirlObjectDefinition {
   initialPulseScale?: number;
 }
 
-export type SimObjectDefinition = SphereObjectDefinition | TwirlObjectDefinition;
+export interface TwirlingAxisObjectDefinition {
+  type: 'twirling-axis';
+  id: string;
+  speedPerTick: number;
+  direction: 1 | -1;
+  visible?: boolean;
+  spinX?: boolean;
+  spinY?: boolean;
+  spinZ?: boolean;
+  size?: number;
+  initialRotationX?: number;
+  initialRotationY?: number;
+  initialRotationZ?: number;
+  opacity?: number;
+}
+
+export type SimObjectDefinition =
+  | SphereObjectDefinition
+  | TwirlObjectDefinition
+  | TwirlingAxisObjectDefinition;

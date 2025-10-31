@@ -8,6 +8,7 @@ export interface AxisHalfMesh {
   normalBuffer: WebGLBuffer;
   colorBuffer: WebGLBuffer;
   alphaBuffer: WebGLBuffer;
+  opacityBuffer: WebGLBuffer;
   indexBuffer: WebGLBuffer;
   lineIndexBuffer: WebGLBuffer | null;
   indexCount: number;
@@ -37,6 +38,7 @@ export interface AxisProgram {
   attribNormal: number;
   attribColor: number;
   attribAlpha: number;
+  attribOpacityFlag: number;
   uniformModel: WebGLUniformLocation;
   uniformView: WebGLUniformLocation;
   uniformProjection: WebGLUniformLocation;
@@ -73,7 +75,7 @@ export interface AxisDrawParams {
   opacity: number;
 }
 
-const AXIS_COLORS: Record<'x' | 'y' | 'z', [number, number, number]> = {
+export const AXIS_COLORS: Record<'x' | 'y' | 'z', [number, number, number]> = {
   x: [0.2, 0.9, 0.5],
   y: [0.95, 0.93, 0.4],
   z: [0.38, 0.62, 1.0],
@@ -102,14 +104,15 @@ export interface AxisGeometryOptions {
  * Baseline geometry values for the primary axes.
  */
 const DEFAULT_AXIS_OPTIONS: Required<AxisGeometryOptions> = {
-  length: 6.2,
-  radius: 0.0225,
+  length: 49.6,
+  radius: 0.18,
   segments: 32,
   positiveAlpha: 1.0,
   negativeAlphaScale: 0.25,
   negativeColorScale: 0.5,
 };
 
+export const DEFAULT_AXIS_LENGTH = DEFAULT_AXIS_OPTIONS.length;
 export const DEFAULT_AXIS_RADIUS = DEFAULT_AXIS_OPTIONS.radius;
 export const DEFAULT_AXIS_NEGATIVE_ALPHA_SCALE = DEFAULT_AXIS_OPTIONS.negativeAlphaScale;
 export const DEFAULT_AXIS_NEGATIVE_COLOR_SCALE = DEFAULT_AXIS_OPTIONS.negativeColorScale;
@@ -164,6 +167,7 @@ export function createAxisProgram(gl: WebGLRenderingContext): AxisProgram {
     attribute vec3 aNormal;
     attribute vec3 aColor;
     attribute float aAlpha;
+    attribute float aOpacityFlag;
 
     uniform mat4 uModelMatrix;
     uniform mat4 uViewMatrix;
@@ -178,6 +182,7 @@ export function createAxisProgram(gl: WebGLRenderingContext): AxisProgram {
     varying vec3 vWorldPosition;
     varying vec3 vColor;
     varying float vAlpha;
+    varying float vOpacityFlag;
 
     void main() {
       vec4 worldPosition = uModelMatrix * vec4(aPosition, 1.0);
@@ -187,6 +192,7 @@ export function createAxisProgram(gl: WebGLRenderingContext): AxisProgram {
       vColor = baseColor;
       float baseAlpha = mix(aAlpha, uSolidAlpha, clamp(uUseSolidAlpha, 0.0, 1.0));
       vAlpha = baseAlpha;
+      vOpacityFlag = aOpacityFlag;
       gl_Position = uProjectionMatrix * uViewMatrix * worldPosition;
     }
   `;
@@ -198,6 +204,7 @@ export function createAxisProgram(gl: WebGLRenderingContext): AxisProgram {
     varying vec3 vWorldPosition;
     varying vec3 vColor;
     varying float vAlpha;
+    varying float vOpacityFlag;
 
     uniform vec3 uLightDirection;
     uniform float uClipEnabled;
@@ -217,7 +224,8 @@ export function createAxisProgram(gl: WebGLRenderingContext): AxisProgram {
       float diffuse = max(dot(normal, normalize(uLightDirection)), 0.0);
       float ambient = 0.35;
       vec3 shaded = vColor * (ambient + (1.0 - ambient) * diffuse);
-      float alpha = clamp(vAlpha * uOpacity, 0.0, 1.0);
+      float opacityScale = mix(1.0, uOpacity, clamp(vOpacityFlag, 0.0, 1.0));
+      float alpha = clamp(vAlpha * opacityScale, 0.0, 1.0);
       gl_FragColor = vec4(clamp(shaded, 0.0, 1.0), alpha);
     }
   `;
@@ -249,6 +257,7 @@ export function createAxisProgram(gl: WebGLRenderingContext): AxisProgram {
   const attribNormal = gl.getAttribLocation(program, 'aNormal');
   const attribColor = gl.getAttribLocation(program, 'aColor');
   const attribAlpha = gl.getAttribLocation(program, 'aAlpha');
+  const attribOpacityFlag = gl.getAttribLocation(program, 'aOpacityFlag');
 
   const uniformModel = getRequiredUniform(gl, program, 'uModelMatrix');
   const uniformView = getRequiredUniform(gl, program, 'uViewMatrix');
@@ -270,6 +279,7 @@ export function createAxisProgram(gl: WebGLRenderingContext): AxisProgram {
     attribNormal,
     attribColor,
     attribAlpha,
+    attribOpacityFlag,
     uniformModel,
     uniformView,
     uniformProjection,
@@ -352,6 +362,10 @@ function drawAxisHalf(gl: WebGLRenderingContext, axisProgram: AxisProgram, mesh:
   gl.vertexAttribPointer(axisProgram.attribAlpha, 1, gl.FLOAT, false, 0, 0);
   gl.enableVertexAttribArray(axisProgram.attribAlpha);
 
+  gl.bindBuffer(gl.ARRAY_BUFFER, mesh.opacityBuffer);
+  gl.vertexAttribPointer(axisProgram.attribOpacityFlag, 1, gl.FLOAT, false, 0, 0);
+  gl.enableVertexAttribArray(axisProgram.attribOpacityFlag);
+
   gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, mesh.indexBuffer);
   gl.drawElements(gl.TRIANGLES, mesh.indexCount, gl.UNSIGNED_SHORT, 0);
 
@@ -411,6 +425,7 @@ interface AxisHalfGeometry {
   normals: Float32Array;
   colors: Float32Array;
   alphas: Float32Array;
+  opacityFlags: Float32Array;
   indices: Uint16Array;
   lineIndices: Uint16Array;
 }
@@ -420,10 +435,11 @@ function uploadAxisHalfMesh(gl: WebGLRenderingContext, geometry: AxisHalfGeometr
   const normalBuffer = gl.createBuffer();
   const colorBuffer = gl.createBuffer();
   const alphaBuffer = gl.createBuffer();
+  const opacityBuffer = gl.createBuffer();
   const indexBuffer = gl.createBuffer();
   const lineIndexBuffer = geometry.lineIndices.length > 0 ? gl.createBuffer() : null;
 
-  if (!positionBuffer || !normalBuffer || !colorBuffer || !alphaBuffer || !indexBuffer) {
+  if (!positionBuffer || !normalBuffer || !colorBuffer || !alphaBuffer || !opacityBuffer || !indexBuffer) {
     throw new Error('Failed to allocate buffers for axis mesh.');
   }
 
@@ -439,6 +455,9 @@ function uploadAxisHalfMesh(gl: WebGLRenderingContext, geometry: AxisHalfGeometr
   gl.bindBuffer(gl.ARRAY_BUFFER, alphaBuffer);
   gl.bufferData(gl.ARRAY_BUFFER, geometry.alphas, gl.STATIC_DRAW);
 
+  gl.bindBuffer(gl.ARRAY_BUFFER, opacityBuffer);
+  gl.bufferData(gl.ARRAY_BUFFER, geometry.opacityFlags, gl.STATIC_DRAW);
+
   gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, indexBuffer);
   gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, geometry.indices, gl.STATIC_DRAW);
 
@@ -453,6 +472,7 @@ function uploadAxisHalfMesh(gl: WebGLRenderingContext, geometry: AxisHalfGeometr
     normalBuffer,
     colorBuffer,
     alphaBuffer,
+    opacityBuffer,
     indexBuffer,
     lineIndexBuffer,
     indexCount: geometry.indices.length,
@@ -480,6 +500,7 @@ function disposeAxisHalfMesh(gl: WebGLRenderingContext, mesh: AxisHalfMesh | nul
   gl.deleteBuffer(mesh.normalBuffer);
   gl.deleteBuffer(mesh.colorBuffer);
   gl.deleteBuffer(mesh.alphaBuffer);
+  gl.deleteBuffer(mesh.opacityBuffer);
   gl.deleteBuffer(mesh.indexBuffer);
   if (mesh.lineIndexBuffer) {
     gl.deleteBuffer(mesh.lineIndexBuffer);
@@ -504,6 +525,7 @@ function buildAxisHalfGeometry(
   const normals: number[] = [];
   const colors: number[] = [];
   const alphas: number[] = [];
+  const opacityFlags: number[] = [];
   const indices: number[] = [];
   const lineIndices: number[] = [];
 
@@ -521,9 +543,11 @@ function buildAxisHalfGeometry(
     pushVertex(axis, endHeight, cos, sin, radius, positions, normals);
     colors.push(scaledColor[0], scaledColor[1], scaledColor[2]);
     alphas.push(alpha);
+    opacityFlags.push(1);
     pushVertex(axis, startHeight, cos, sin, radius, positions, normals);
     colors.push(scaledColor[0], scaledColor[1], scaledColor[2]);
     alphas.push(alpha);
+    opacityFlags.push(1);
   }
 
   for (let i = 0; i < segments; i += 1) {
@@ -547,6 +571,7 @@ function buildAxisHalfGeometry(
     normals: new Float32Array(normals),
     colors: new Float32Array(colors),
     alphas: new Float32Array(alphas),
+    opacityFlags: new Float32Array(opacityFlags),
     indices: new Uint16Array(indices),
     lineIndices: new Uint16Array(lineIndices),
   };

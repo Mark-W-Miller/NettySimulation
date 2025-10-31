@@ -9,11 +9,13 @@ import {
   type SphereProgram,
   type TwirlMesh,
   type TwirlProgram,
+  type TwirlingAxisMesh,
 } from '../engine/Assets';
 import {
   type BaseColor,
   type SphereObjectDefinition,
   type TwirlObjectDefinition,
+  type TwirlingAxisObjectDefinition,
   type SimObjectDefinition,
 } from '../engine/assets/simTypes';
 import { CameraController } from './camera';
@@ -35,7 +37,6 @@ import {
 
 interface BaseSimObject {
   id: string;
-  type: 'sphere' | 'twirl';
   rotationY: number;
   speedPerTick: number;
   direction: 1 | -1;
@@ -63,7 +64,41 @@ interface TwirlObject extends BaseSimObject {
   pulseScale: number;
 }
 
-type SimObject = SphereObject | TwirlObject;
+interface TwirlingAxisObject {
+  type: 'twirling-axis';
+  id: string;
+  mesh: TwirlingAxisMesh;
+  rotationX: number;
+  rotationY: number;
+  rotationZ: number;
+  speedPerTick: number;
+  direction: 1 | -1;
+  visible: boolean;
+  spinX: boolean;
+  spinY: boolean;
+  spinZ: boolean;
+  size: number;
+  opacity: number;
+}
+
+type SimObject = SphereObject | TwirlObject | TwirlingAxisObject;
+
+type SimObjectUpdatePayload = Partial<{
+  speedPerTick: number;
+  direction: 1 | -1;
+  plane: 'YG' | 'GB' | 'YB';
+  shellSize: number;
+  baseColor: BaseColor;
+  visible: boolean;
+  shadingIntensity: number;
+  opacity: number;
+  spinX: boolean;
+  spinY: boolean;
+  spinZ: boolean;
+  size: number;
+  beltHalfAngle: number;
+  pulseSpeed: number;
+}>; 
 
 interface SimulationSegmentDefinition {
   id: string;
@@ -79,11 +114,13 @@ export class App {
   private axisProgram: AxisProgram | null = null;
   private sphereMesh: SphereMesh | null = null;
   private twirlMesh: TwirlMesh | null = null;
+  private twirlingAxisMesh: TwirlingAxisMesh | null = null;
   private axes: AxisSet | null = null;
   private rotatedAxes: AxisSet | null = null;
   private axisVisibility: Record<'x' | 'y' | 'z', boolean> = { x: true, y: true, z: true };
   private showSecondaryAxes = false;
   private axisOpacitySlider = 1;
+  private axisRadiusScale = 1;
   private sphereSegments = { lat: 48, lon: 48 };
   private shadingIntensity = 0.4;
 
@@ -191,6 +228,20 @@ export class App {
           initialPulsePhase: 0.5,
           initialPulseScale: 1,
         },
+        {
+          type: 'twirling-axis',
+          id: 'formation-axis',
+          speedPerTick: 10,
+          direction: 1,
+          visible: true,
+          spinX: false,
+          spinY: true,
+          spinZ: true,
+          size: 1,
+          initialRotationY: 0,
+          initialRotationZ: 0,
+          opacity: 1,
+        },
       ],
     },
   ];
@@ -230,9 +281,12 @@ export class App {
       Math.max(32, this.sphereSegments.lon * 4),
       this.sphereSegments.lon,
     );
-    const axes = Assets.createAxisSet(gl);
+    const axisRadius = this.getAxisRadiusValue();
+    const axes = Assets.createAxisSet(gl, {
+      radius: axisRadius,
+    });
     const rotatedAxes = Assets.createAxisSet(gl, {
-      radius: DEFAULT_AXIS_RADIUS * 0.25,
+      radius: axisRadius * 0.25,
       negativeAlphaScale: 1.0,
     });
 
@@ -303,6 +357,10 @@ export class App {
       Assets.disposeTwirlMesh(this.gl, this.twirlMesh);
     }
 
+    if (this.gl && this.twirlingAxisMesh) {
+      Assets.disposeTwirlingAxisMesh(this.gl, this.twirlingAxisMesh);
+    }
+
     if (this.gl && this.axes) {
       Assets.disposeAxisSet(this.gl, this.axes);
     }
@@ -330,6 +388,7 @@ export class App {
     this.twirlProgram = null;
     this.sphereMesh = null;
     this.twirlMesh = null;
+    this.twirlingAxisMesh = null;
     this.axes = null;
     this.rotatedAxes = null;
     this.simObjects.length = 0;
@@ -409,11 +468,30 @@ export class App {
 
     const sphereQueue: SphereObject[] = [];
     const twirlQueue: TwirlObject[] = [];
+    const twirlingAxisQueue: TwirlingAxisObject[] = [];
 
     for (const simObject of this.simObjects) {
       if (!simObject.visible) {
         continue;
       }
+
+      if (simObject.type === 'twirling-axis') {
+        if (beats > 0) {
+          const rotationDelta = beats * this.rotationPerBeat * simObject.speedPerTick * simObject.direction;
+          if (simObject.spinX) {
+            simObject.rotationX += rotationDelta;
+          }
+          if (simObject.spinY) {
+            simObject.rotationY += rotationDelta;
+          }
+          if (simObject.spinZ) {
+            simObject.rotationZ += rotationDelta;
+          }
+        }
+        twirlingAxisQueue.push(simObject);
+        continue;
+      }
+
       if (beats > 0) {
         simObject.rotationY += beats * this.rotationPerBeat * simObject.speedPerTick * simObject.direction;
       }
@@ -474,6 +552,31 @@ export class App {
       gl.disable(gl.BLEND);
 
       // Restore sphere program for axis rendering.
+      Assets.useSphereProgram(gl, sphereProgram);
+      Assets.setSphereSharedUniforms(gl, sphereProgram, sharedUniforms);
+    }
+
+    if (twirlingAxisQueue.length > 0) {
+      Assets.useAxisProgram(gl, axisProgram);
+      Assets.setAxisSharedUniforms(gl, axisProgram, sharedUniforms);
+      gl.enable(gl.BLEND);
+      gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+
+      for (const axisObject of twirlingAxisQueue) {
+        const { modelMatrix, normalMatrix } = this.computeTwirlingAxisMatrices(axisObject);
+        const axisOpacity = clamp(this.getAxisOpacityAlpha() * axisObject.opacity, 0, 1);
+        Assets.drawTwirlingAxis(gl, axisProgram, axisObject.mesh, {
+          modelMatrix,
+          normalMatrix,
+          clipEnabled: false,
+          clipCenter: this.originVector,
+          clipRadius: 0,
+          opacity: axisOpacity,
+        });
+      }
+
+      gl.disable(gl.BLEND);
+      gl.clear(gl.DEPTH_BUFFER_BIT);
       Assets.useSphereProgram(gl, sphereProgram);
       Assets.setSphereSharedUniforms(gl, sphereProgram, sharedUniforms);
     }
@@ -548,6 +651,24 @@ export class App {
           pulsePhase: initialPhase,
           pulseScale: initialScale,
         });
+      } else if (objectDef.type === 'twirling-axis') {
+        const mesh = this.ensureTwirlingAxisMesh();
+        this.simObjects.push({
+          type: 'twirling-axis',
+          id: objectDef.id,
+          mesh,
+          rotationX: objectDef.initialRotationX ?? 0,
+          rotationY: objectDef.initialRotationY ?? 0,
+          rotationZ: objectDef.initialRotationZ ?? 0,
+          speedPerTick: objectDef.speedPerTick,
+          direction: objectDef.direction,
+          visible: objectDef.visible ?? true,
+          spinX: objectDef.spinX ?? false,
+          spinY: objectDef.spinY ?? false,
+          spinZ: objectDef.spinZ ?? false,
+          size: Math.max(0.01, objectDef.size ?? 1),
+          opacity: clamp(objectDef.opacity ?? 1, 0, 1),
+        });
       } else {
         const mesh = this.ensureSphereMesh();
         this.simObjects.push({
@@ -593,6 +714,16 @@ export class App {
       );
     }
     return this.twirlMesh;
+  }
+
+  private ensureTwirlingAxisMesh(): TwirlingAxisMesh {
+    if (!this.twirlingAxisMesh) {
+      if (!this.gl) {
+        throw new Error('Twirling axis mesh requested before WebGL context initialized.');
+      }
+      this.twirlingAxisMesh = Assets.createTwirlingAxisMesh(this.gl);
+    }
+    return this.twirlingAxisMesh;
   }
 
   private drawAxisSet(
@@ -703,14 +834,7 @@ export class App {
     return this.simObjects.find((object) => object.id === this.selectedObjectId) ?? null;
   }
 
-  updateSelectedSimObject(
-    update: Partial<
-      Pick<
-        SimObject,
-        'speedPerTick' | 'direction' | 'plane' | 'shellSize' | 'baseColor' | 'visible' | 'shadingIntensity' | 'opacity'
-      >
-    >,
-  ): void {
+  updateSelectedSimObject(update: SimObjectUpdatePayload): void {
     const selected = this.getSelectedSimObject();
     if (!selected) {
       return;
@@ -720,43 +844,61 @@ export class App {
       selected.speedPerTick = Math.max(0.1, update.speedPerTick);
     }
 
-    if (update.direction) {
+    if (update.direction !== undefined) {
       selected.direction = update.direction >= 0 ? 1 : -1;
-    }
-
-    if (update.plane) {
-      selected.plane = update.plane;
-    }
-
-    if (typeof update.shellSize === 'number' && Number.isFinite(update.shellSize)) {
-      selected.shellSize = Math.max(1, Math.floor(update.shellSize));
-    }
-
-    if (update.baseColor) {
-      selected.baseColor = update.baseColor;
     }
 
     if (typeof update.visible === 'boolean') {
       selected.visible = update.visible;
     }
 
-    if (typeof update.shadingIntensity === 'number' && Number.isFinite(update.shadingIntensity)) {
-      selected.shadingIntensity = clamp(update.shadingIntensity, 0, 1);
-    }
-
     if (typeof update.opacity === 'number' && Number.isFinite(update.opacity)) {
-      selected.opacity = clamp(update.opacity, 0, 1);
+      const clampedOpacity = clamp(update.opacity, 0, 1);
+      if (selected.type === 'twirling-axis') {
+        selected.opacity = clampedOpacity;
+      } else {
+        selected.opacity = clampedOpacity;
+      }
     }
 
-    if (selected.type === 'twirl') {
-      const belt = (update as Partial<TwirlObject>).beltHalfAngle;
-      if (typeof belt === 'number' && Number.isFinite(belt)) {
-        selected.beltHalfAngle = clamp(belt, 0.001, Math.PI / 2);
+    if (selected.type === 'twirling-axis') {
+      if (typeof update.spinX === 'boolean') {
+        selected.spinX = update.spinX;
+      }
+      if (typeof update.spinY === 'boolean') {
+        selected.spinY = update.spinY;
+      }
+      if (typeof update.spinZ === 'boolean') {
+        selected.spinZ = update.spinZ;
+      }
+      if (typeof update.size === 'number' && Number.isFinite(update.size)) {
+        selected.size = Math.max(0.01, update.size);
+      }
+    } else {
+      if (update.plane) {
+        selected.plane = update.plane;
       }
 
-      const pulse = (update as Partial<TwirlObject>).pulseSpeed;
-      if (typeof pulse === 'number' && Number.isFinite(pulse)) {
-        selected.pulseSpeed = Math.max(0, pulse);
+      if (typeof update.shellSize === 'number' && Number.isFinite(update.shellSize)) {
+        selected.shellSize = Math.max(1, Math.floor(update.shellSize));
+      }
+
+      if (update.baseColor) {
+        selected.baseColor = update.baseColor;
+      }
+
+      if (typeof update.shadingIntensity === 'number' && Number.isFinite(update.shadingIntensity)) {
+        selected.shadingIntensity = clamp(update.shadingIntensity, 0, 1);
+      }
+
+      if (selected.type === 'twirl') {
+        if (typeof update.beltHalfAngle === 'number' && Number.isFinite(update.beltHalfAngle)) {
+          selected.beltHalfAngle = clamp(update.beltHalfAngle, 0.001, Math.PI / 2);
+        }
+
+        if (typeof update.pulseSpeed === 'number' && Number.isFinite(update.pulseSpeed)) {
+          selected.pulseSpeed = Math.max(0, update.pulseSpeed);
+        }
       }
     }
 
@@ -770,6 +912,10 @@ export class App {
   }
 
   private computeModelMatrices(simObject: SimObject): { modelMatrix: Float32Array; normalMatrix: Float32Array } {
+    if (simObject.type === 'twirling-axis') {
+      return this.computeTwirlingAxisMatrices(simObject);
+    }
+
     let rotationMatrix: Float32Array;
     let alignmentMatrix: Float32Array;
 
@@ -812,6 +958,33 @@ export class App {
     };
   }
 
+  private computeTwirlingAxisMatrices(
+    simObject: TwirlingAxisObject,
+  ): { modelMatrix: Float32Array; normalMatrix: Float32Array } {
+    let rotationMatrix = mat4Identity();
+
+    if (simObject.spinY || simObject.rotationY !== 0) {
+      rotationMatrix = mat4Multiply(rotationMatrix, mat4FromYRotation(simObject.rotationY));
+    }
+
+    if (simObject.spinZ || simObject.rotationZ !== 0) {
+      rotationMatrix = mat4Multiply(rotationMatrix, mat4FromZRotation(simObject.rotationZ));
+    }
+
+    if (simObject.spinX || simObject.rotationX !== 0) {
+      rotationMatrix = mat4Multiply(rotationMatrix, mat4FromXRotation(simObject.rotationX));
+    }
+
+    const scaleFactor = Math.max(0.01, simObject.size);
+    const scaleMatrix = mat4ScaleUniform(scaleFactor);
+    const modelMatrix = mat4Multiply(rotationMatrix, scaleMatrix);
+
+    return {
+      modelMatrix,
+      normalMatrix: mat3FromMat4(rotationMatrix),
+    };
+  }
+
   private getPlaneNormal(plane: SimObject['plane']): Float32Array {
     switch (plane) {
       case 'GB':
@@ -828,6 +1001,40 @@ export class App {
   private getBaseColorVector(color: BaseColor, opacity: number): Float32Array {
     const base = this.baseColorVectors[color];
     return new Float32Array([base[0], base[1], base[2], clamp(opacity, 0, 1)]);
+  }
+
+  private getAxisRadiusValue(): number {
+    const baseRadius = DEFAULT_AXIS_RADIUS * 0.1;
+    return baseRadius * this.axisRadiusScale;
+  }
+
+  private rebuildAxisMeshes(): void {
+    if (!this.gl) {
+      return;
+    }
+
+    const gl = this.gl;
+    const axisRadius = this.getAxisRadiusValue();
+    const previousPrimary = this.axes;
+    const previousSecondary = this.rotatedAxes;
+
+    const newPrimary = Assets.createAxisSet(gl, {
+      radius: axisRadius,
+    });
+    const newSecondary = Assets.createAxisSet(gl, {
+      radius: axisRadius * 0.25,
+      negativeAlphaScale: 1.0,
+    });
+
+    this.axes = newPrimary;
+    this.rotatedAxes = newSecondary;
+
+    if (previousPrimary) {
+      Assets.disposeAxisSet(gl, previousPrimary);
+    }
+    if (previousSecondary) {
+      Assets.disposeAxisSet(gl, previousSecondary);
+    }
   }
 
   getAxisVisibility(): Readonly<Record<'x' | 'y' | 'z', boolean>> {
@@ -856,6 +1063,23 @@ export class App {
       return;
     }
     this.axisOpacitySlider = clamped;
+    this.notifySimChange();
+  }
+
+  getAxisRadiusScale(): number {
+    return this.axisRadiusScale;
+  }
+
+  setAxisRadiusScale(scale: number): void {
+    if (!Number.isFinite(scale)) {
+      return;
+    }
+    const clamped = Math.max(1, Math.floor(scale));
+    if (clamped === this.axisRadiusScale) {
+      return;
+    }
+    this.axisRadiusScale = clamped;
+    this.rebuildAxisMeshes();
     this.notifySimChange();
   }
 
@@ -918,13 +1142,17 @@ export class App {
   }
 
   getShadingIntensity(): number {
-    return this.getSelectedSimObject()?.shadingIntensity ?? this.shadingIntensity;
+    const selected = this.getSelectedSimObject();
+    if (selected && selected.type !== 'twirling-axis') {
+      return selected.shadingIntensity;
+    }
+    return this.shadingIntensity;
   }
 
   setShadingIntensity(intensity: number): void {
     const clamped = clamp(intensity, 0, 1);
     const selected = this.getSelectedSimObject();
-    if (selected) {
+    if (selected && selected.type !== 'twirling-axis') {
       if (selected.shadingIntensity === clamped) {
         return;
       }
