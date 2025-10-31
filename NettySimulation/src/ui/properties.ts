@@ -269,56 +269,13 @@ export function createPropertiesTab(app: App): HTMLElement {
       form.appendChild(baseColorGroup);
     }
 
-    let spinXCheckbox: HTMLInputElement | undefined;
-    let spinYCheckbox: HTMLInputElement | undefined;
-    let spinZCheckbox: HTMLInputElement | undefined;
     let sizeInput: HTMLInputElement | undefined;
 
     if (isTwirlingAxis) {
       const axisSim = simObject as SimObjectView & {
-        spinX?: boolean;
-        spinY?: boolean;
-        spinZ?: boolean;
         size?: number;
         opacity?: number;
       };
-
-      const spinGroup = document.createElement('fieldset');
-      spinGroup.className = 'properties-fieldset';
-      const spinLegend = document.createElement('legend');
-      spinLegend.textContent = 'Active Axes';
-      spinGroup.appendChild(spinLegend);
-
-      const createSpinControl = (labelText: string, key: 'spinX' | 'spinY' | 'spinZ') => {
-        const label = document.createElement('label');
-        label.className = 'properties-radio';
-        const input = document.createElement('input');
-        input.type = 'checkbox';
-        input.checked = axisSim[key] ?? false;
-        input.addEventListener('change', () => {
-          switch (key) {
-            case 'spinX':
-              applyUpdate({ spinX: input.checked } as ObjectUpdate);
-              break;
-            case 'spinY':
-              applyUpdate({ spinY: input.checked } as ObjectUpdate);
-              break;
-            case 'spinZ':
-              applyUpdate({ spinZ: input.checked } as ObjectUpdate);
-              break;
-          }
-        });
-        const span = document.createElement('span');
-        span.textContent = labelText;
-        label.appendChild(input);
-        label.appendChild(span);
-        spinGroup.appendChild(label);
-        return input;
-      };
-
-      spinXCheckbox = createSpinControl('Spin about X axis', 'spinX');
-      spinYCheckbox = createSpinControl('Spin about Y axis', 'spinY');
-      spinZCheckbox = createSpinControl('Spin about Z axis', 'spinZ');
 
       const sizeGroup = document.createElement('div');
       sizeGroup.className = 'properties-group';
@@ -379,7 +336,6 @@ export function createPropertiesTab(app: App): HTMLElement {
       axisOpacityGroup.appendChild(opacitySlider);
       axisOpacityGroup.appendChild(opacityValue);
 
-      form.appendChild(spinGroup);
       form.appendChild(sizeGroup);
       form.appendChild(axisOpacityGroup);
     }
@@ -596,9 +552,6 @@ export function createPropertiesTab(app: App): HTMLElement {
       lonInput,
       beltInput,
       pulseInput,
-      spinXCheckbox,
-      spinYCheckbox,
-      spinZCheckbox,
       sizeInput,
     };
   };
@@ -659,18 +612,6 @@ export function createPropertiesTab(app: App): HTMLElement {
     if (controls.pulseInput) {
       const pulseValue = simObject.type === 'twirl' ? simObject.pulseSpeed : 0;
       controls.pulseInput.value = pulseValue.toFixed(2);
-    }
-
-    if (controls.spinXCheckbox) {
-      controls.spinXCheckbox.checked = simObject.type === 'twirling-axis' ? simObject.spinX : false;
-    }
-
-    if (controls.spinYCheckbox) {
-      controls.spinYCheckbox.checked = simObject.type === 'twirling-axis' ? simObject.spinY : false;
-    }
-
-    if (controls.spinZCheckbox) {
-      controls.spinZCheckbox.checked = simObject.type === 'twirling-axis' ? simObject.spinZ : false;
     }
 
     if (controls.sizeInput) {

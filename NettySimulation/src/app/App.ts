@@ -82,9 +82,6 @@ interface TwirlingAxisObject {
   speedPerTick: number;
   direction: 1 | -1;
   visible: boolean;
-  spinX: boolean;
-  spinY: boolean;
-  spinZ: boolean;
   size: number;
   opacity: number;
 }
@@ -140,6 +137,7 @@ export class App {
   private shadingIntensity = 0.4;
   private ghostParticles: GhostParticle[] = [];
   private ghostBeatAccumulator = 0;
+  private twirlingAxisStepIndex = 0;
 
   private readonly camera = new CameraController();
   private readonly identityModelMatrix = mat4Identity();
@@ -410,6 +408,7 @@ export class App {
     this.rotatedAxes = null;
     this.ghostParticles = [];
     this.ghostBeatAccumulator = 0;
+    this.twirlingAxisStepIndex = 0;
     this.simObjects.length = 0;
     this.simRunning = false;
     this.selectedObjectId = null;
@@ -496,16 +495,7 @@ export class App {
 
       if (simObject.type === 'twirling-axis') {
         if (beats > 0) {
-          const rotationDelta = beats * this.rotationPerBeat * simObject.speedPerTick * simObject.direction;
-          if (simObject.spinX) {
-            simObject.rotationX += rotationDelta;
-          }
-          if (simObject.spinY) {
-            simObject.rotationY += rotationDelta;
-          }
-          if (simObject.spinZ) {
-            simObject.rotationZ += rotationDelta;
-          }
+          this.advanceTwirlingAxis(simObject, beats);
         }
         twirlingAxisQueue.push(simObject);
         continue;
@@ -648,6 +638,7 @@ export class App {
 
     this.ghostParticles = [];
     this.ghostBeatAccumulator = 0;
+    this.twirlingAxisStepIndex = 0;
 
     this.simObjects.length = 0;
     for (const objectDef of segment.objects) {
@@ -691,9 +682,6 @@ export class App {
           speedPerTick: objectDef.speedPerTick,
           direction: objectDef.direction,
           visible: objectDef.visible ?? true,
-          spinX: objectDef.spinX ?? false,
-          spinY: objectDef.spinY ?? false,
-          spinZ: objectDef.spinZ ?? false,
           size: Math.max(0.01, objectDef.size ?? 1),
           opacity: clamp(objectDef.opacity ?? 1, 0, 1),
         });
@@ -1084,32 +1072,8 @@ export class App {
       return;
     }
 
-    this.ghostBeatAccumulator += beats;
-    const spawnIterations = Math.floor(this.ghostBeatAccumulator);
-    if (spawnIterations <= 0) {
-      return;
-    }
-    this.ghostBeatAccumulator -= spawnIterations;
-
     const halfLength = TWIRLING_AXIS_BASE_LENGTH / 2;
-
-    for (let iteration = 0; iteration < spawnIterations; iteration += 1) {
-      for (const axisObject of axisObjects) {
-        if (!axisObject.visible) {
-          continue;
-        }
-        const { modelMatrix } = this.computeTwirlingAxisMatrices(axisObject);
-        const sizeScale = Math.max(0.01, axisObject.size);
-        const ballRadius = TWIRLING_AXIS_BASE_RADIUS * TWIRLING_AXIS_BALL_SCALE * sizeScale * 0.5;
-        const ghostOpacity = clamp(axisObject.opacity * 0.7, 0.05, 1);
-
-        const xTip = this.transformPoint(modelMatrix, [halfLength, 0, 0]);
-        const yTip = this.transformPoint(modelMatrix, [0, halfLength, 0]);
-
-        this.addGhostParticle(xTip, AXIS_COLORS.x, ballRadius, ghostOpacity);
-        this.addGhostParticle(yTip, AXIS_COLORS.y, ballRadius, ghostOpacity);
-      }
-    }
+    // Ghost particles are emitted via advanceTwirlingAxis per completed step.
   }
 
   private addGhostParticle(position: Float32Array, color: [number, number, number], radius: number, opacity: number): void {
@@ -1122,6 +1086,51 @@ export class App {
 
     if (this.ghostParticles.length > MAX_GHOST_PARTICLES) {
       this.ghostParticles.splice(0, this.ghostParticles.length - MAX_GHOST_PARTICLES);
+    }
+  }
+
+  private advanceTwirlingAxis(simObject: TwirlingAxisObject, beats: number): void {
+    const stepDurationBeats = 3; // 90-degree rotation at rotationPerBeat
+    this.ghostBeatAccumulator += beats;
+
+    while (this.ghostBeatAccumulator >= stepDurationBeats) {
+      this.ghostBeatAccumulator -= stepDurationBeats;
+
+      const step = this.twirlingAxisStepIndex % 6;
+      switch (step) {
+        case 0:
+          simObject.rotationX += Math.PI / 2;
+          break;
+        case 1:
+          simObject.rotationY += Math.PI / 2;
+          break;
+        case 2:
+          simObject.rotationZ += Math.PI / 2;
+          break;
+        case 3:
+          simObject.rotationX -= Math.PI / 2;
+          break;
+        case 4:
+          simObject.rotationY -= Math.PI / 2;
+          break;
+        case 5:
+          simObject.rotationZ -= Math.PI / 2;
+          break;
+      }
+
+      this.twirlingAxisStepIndex = (this.twirlingAxisStepIndex + 1) % 6;
+
+      const halfLength = TWIRLING_AXIS_BASE_LENGTH / 2;
+      const { modelMatrix } = this.computeTwirlingAxisMatrices(simObject);
+      const sizeScale = Math.max(0.01, simObject.size);
+      const ballRadius = TWIRLING_AXIS_BASE_RADIUS * TWIRLING_AXIS_BALL_SCALE * sizeScale * 0.5;
+      const ghostOpacity = clamp(simObject.opacity * 0.7, 0.05, 1);
+
+      const xTip = this.transformPoint(modelMatrix, [halfLength, 0, 0]);
+      const yTip = this.transformPoint(modelMatrix, [0, halfLength, 0]);
+
+      this.addGhostParticle(xTip, AXIS_COLORS.x, ballRadius, ghostOpacity);
+      this.addGhostParticle(yTip, AXIS_COLORS.y, ballRadius, ghostOpacity);
     }
   }
 

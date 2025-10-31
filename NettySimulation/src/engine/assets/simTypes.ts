@@ -50,9 +50,6 @@ export interface TwirlingAxisObjectDefinition {
   speedPerTick: number;
   direction: 1 | -1;
   visible?: boolean;
-  spinX?: boolean;
-  spinY?: boolean;
-  spinZ?: boolean;
   size?: number;
   initialRotationX?: number;
   initialRotationY?: number;
