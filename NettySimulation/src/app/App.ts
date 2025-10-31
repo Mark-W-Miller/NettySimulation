@@ -196,6 +196,7 @@ interface Dexel {
   size: number;
   primary: RgpRingState;
   secondary: RgpRingState;
+  sourceId: string;
 }
 
 type SimObject = SphereObject | TwirlObject | TwirlingAxisObject | RgpXYObject;
@@ -615,6 +616,14 @@ export class App {
       }
     }
 
+    if (beats > 0 && this.dexels.length > 0) {
+      const rotationStep = beats * this.rotationPerBeat;
+      for (const dexel of this.dexels) {
+        dexel.primary.rotationY += rotationStep * dexel.primary.speedPerTick * dexel.primary.direction;
+        dexel.secondary.rotationY += rotationStep * dexel.secondary.speedPerTick * dexel.secondary.direction;
+      }
+    }
+
     for (const sphereObject of sphereQueue) {
       const { modelMatrix, normalMatrix } = this.computeModelMatrices(sphereObject);
       Assets.drawSphere(gl, sphereProgram, sphereObject.mesh, {
@@ -1014,6 +1023,9 @@ export class App {
 
     if (typeof update.visible === 'boolean') {
       selected.visible = update.visible;
+      if (!selected.visible && selected.type === 'twirling-axis') {
+        this.ghostParticles = [];
+      }
     }
 
     if (typeof update.opacity === 'number' && Number.isFinite(update.opacity)) {
@@ -1030,11 +1042,19 @@ export class App {
         selected.size = Math.max(0.01, update.size);
       }
     } else if (selected.type === 'rgpXY') {
+      let sizeChanged = false;
       if (typeof update.size === 'number' && Number.isFinite(update.size)) {
-        selected.size = Math.max(0.1, update.size);
+        const nextSize = Math.max(0.1, update.size);
+        if (selected.size !== nextSize) {
+          selected.size = nextSize;
+          sizeChanged = true;
+        }
       }
       if (typeof update.sphereOpacity === 'number' && Number.isFinite(update.sphereOpacity)) {
         selected.sphereOpacity = clamp(update.sphereOpacity, 0, 1);
+      }
+      if (sizeChanged) {
+        this.updateDexelAnchorsForRgp(selected);
       }
     } else {
       if (update.plane) {
@@ -1065,6 +1085,40 @@ export class App {
     }
 
     this.notifySimChange();
+  }
+
+  updateRgpRingProperties(
+    objectId: string,
+    ring: 'primary' | 'secondary',
+    updates: Partial<{ opacity: number; shadingIntensity: number }>,
+  ): void {
+    const target = this.simObjects.find((object) => object.id === objectId);
+    if (!target || target.type !== 'rgpXY') {
+      return;
+    }
+
+    const ringState = ring === 'primary' ? target.primary : target.secondary;
+    let changed = false;
+
+    if (typeof updates.opacity === 'number' && Number.isFinite(updates.opacity)) {
+      const clampedOpacity = clamp(updates.opacity, 0, 1);
+      if (ringState.opacity !== clampedOpacity) {
+        ringState.opacity = clampedOpacity;
+        changed = true;
+      }
+    }
+
+    if (typeof updates.shadingIntensity === 'number' && Number.isFinite(updates.shadingIntensity)) {
+      const clampedShading = clamp(updates.shadingIntensity, 0, 1);
+      if (ringState.shadingIntensity !== clampedShading) {
+        ringState.shadingIntensity = clampedShading;
+        changed = true;
+      }
+    }
+
+    if (changed) {
+      this.notifySimChange();
+    }
   }
 
   private notifySimChange(): void {
@@ -1311,7 +1365,9 @@ export class App {
 
   private drawRgpSphere(gl: WebGLRenderingContext, sphereProgram: SphereProgram, rgp: RgpXYObject): void {
     const mesh = this.ensureSphereMesh();
-    const scaleFactor = Math.max(0.1, rgp.size / this.defaultShellSize);
+    const primaryRadius = this.getRgpRingRadius(rgp.size, rgp.primary);
+    const secondaryRadius = this.getRgpRingRadius(rgp.size, rgp.secondary);
+    const scaleFactor = Math.max(primaryRadius, secondaryRadius);
     const modelMatrix = mat4ScaleUniform(scaleFactor);
     const baseColor = new Float32Array([rgp.sphereColor[0], rgp.sphereColor[1], rgp.sphereColor[2], clamp(rgp.sphereOpacity, 0, 1)]);
 
@@ -1405,6 +1461,12 @@ export class App {
       clipCenter: this.originVector,
       clipRadius: 0,
     });
+  }
+
+  private getRgpRingRadius(size: number, ring: RgpRingState, pulseScaleOverride?: number): number {
+    const shellSize = Math.max(1, size * ring.shellScale);
+    const pulseScale = Math.max(pulseScaleOverride ?? ring.pulseScale, 0.01);
+    return Math.max(0.05, (shellSize / this.defaultShellSize) * pulseScale);
   }
 
   private buildTwirlMatrices(
@@ -1526,12 +1588,8 @@ export class App {
     const axis = this.planeToAxis(dominant.plane);
     const sign = this.dexelLastSign[axis];
     const axisIndex = axis === 'x' ? 0 : axis === 'y' ? 1 : 2;
-    const distance = Math.max(0.1, rgp.size / this.defaultShellSize);
 
-    const position = new Float32Array([0, 0, 0]);
-    position[axisIndex] = sign * distance;
-
-    const existing = this.dexels.some((dexel) => dexel.axis === axis && dexel.sign === sign);
+    const existing = this.dexels.some((dexel) => dexel.axis === axis && dexel.sign === sign && dexel.sourceId === rgp.id);
     if (existing) {
       return;
     }
@@ -1540,8 +1598,8 @@ export class App {
 
     const primaryConfig: RgpRingConfig = {
       ...RGP_PRIMARY_CONFIG,
-      speedPerTick: 0,
-      direction: 1,
+      speedPerTick: rgp.primary.speedPerTick,
+      direction: rgp.primary.direction,
       initialRotationY: 0,
       initialPulsePhase: 0,
       initialPulseScale: 1,
@@ -1550,8 +1608,8 @@ export class App {
     };
     const secondaryConfig: RgpRingConfig = {
       ...RGP_SECONDARY_CONFIG,
-      speedPerTick: 0,
-      direction: 1,
+      speedPerTick: rgp.secondary.speedPerTick,
+      direction: rgp.secondary.direction,
       initialRotationY: 0,
       initialPulsePhase: 0,
       initialPulseScale: 1,
@@ -1565,9 +1623,24 @@ export class App {
     primary.pulseScale = 1;
     primary.pulsePhase = 0;
     primary.pulseSpeed = 0;
+    primary.rotationY = rgp.primary.rotationY;
     secondary.pulseScale = 1;
     secondary.pulsePhase = 0;
     secondary.pulseSpeed = 0;
+    secondary.rotationY = rgp.secondary.rotationY;
+
+    const maxRgpRadius = Math.max(
+      this.getRgpRingRadius(rgp.size, rgp.primary, 1),
+      this.getRgpRingRadius(rgp.size, rgp.secondary, 1),
+    );
+    const maxDexelRadius = Math.max(
+      this.getRgpRingRadius(rgp.size, primary, 1),
+      this.getRgpRingRadius(rgp.size, secondary, 1),
+    );
+    const distance = maxRgpRadius + maxDexelRadius;
+
+    const position = new Float32Array([0, 0, 0]);
+    position[axisIndex] = sign * distance;
 
     this.dexels.push({
       axis,
@@ -1577,9 +1650,40 @@ export class App {
       primary,
       secondary,
       size: rgp.size,
+      sourceId: rgp.id,
     });
 
+    this.updateDexelAnchorsForRgp(rgp);
     this.notifySimChange();
+  }
+
+  private updateDexelAnchorsForRgp(rgp: RgpXYObject): void {
+    if (this.dexels.length === 0) {
+      return;
+    }
+
+    const maxRgpRadius = Math.max(
+      this.getRgpRingRadius(rgp.size, rgp.primary, 1),
+      this.getRgpRingRadius(rgp.size, rgp.secondary, 1),
+    );
+
+    for (const dexel of this.dexels) {
+      if (dexel.sourceId !== rgp.id) {
+        continue;
+      }
+
+      dexel.size = rgp.size;
+      const maxDexelRadius = Math.max(
+        this.getRgpRingRadius(dexel.size, dexel.primary, 1),
+        this.getRgpRingRadius(dexel.size, dexel.secondary, 1),
+      );
+      const distance = maxRgpRadius + maxDexelRadius;
+      const axisIndex = dexel.axis === 'x' ? 0 : dexel.axis === 'y' ? 1 : 2;
+      dexel.position[0] = 0;
+      dexel.position[1] = 0;
+      dexel.position[2] = 0;
+      dexel.position[axisIndex] = dexel.sign * distance;
+    }
   }
 
   private planeToAxis(plane: 'YG' | 'GB' | 'YB'): 'x' | 'y' | 'z' {

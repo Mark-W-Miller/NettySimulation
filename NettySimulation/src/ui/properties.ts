@@ -54,6 +54,14 @@ export function createPropertiesTab(app: App): HTMLElement {
   opacityValue?: HTMLSpanElement;
   sphereOpacitySlider?: HTMLInputElement;
   sphereOpacityValue?: HTMLSpanElement;
+  primaryShadingSlider?: HTMLInputElement;
+  primaryShadingValue?: HTMLSpanElement;
+  primaryOpacitySlider?: HTMLInputElement;
+  primaryOpacityValue?: HTMLSpanElement;
+  secondaryShadingSlider?: HTMLInputElement;
+  secondaryShadingValue?: HTMLSpanElement;
+  secondaryOpacitySlider?: HTMLInputElement;
+  secondaryOpacityValue?: HTMLSpanElement;
   latInput: HTMLInputElement;
   lonInput: HTMLInputElement;
   beltInput?: HTMLInputElement;
@@ -256,6 +264,24 @@ export function createPropertiesTab(app: App): HTMLElement {
     let scriptSelect: HTMLSelectElement | undefined;
     let sphereOpacitySlider: HTMLInputElement | undefined;
     let sphereOpacityValue: HTMLSpanElement | undefined;
+    let primaryShadingSlider: HTMLInputElement | undefined;
+    let primaryShadingValue: HTMLSpanElement | undefined;
+    let primaryOpacitySlider: HTMLInputElement | undefined;
+    let primaryOpacityValue: HTMLSpanElement | undefined;
+    let secondaryShadingSlider: HTMLInputElement | undefined;
+    let secondaryShadingValue: HTMLSpanElement | undefined;
+    let secondaryOpacitySlider: HTMLInputElement | undefined;
+    let secondaryOpacityValue: HTMLSpanElement | undefined;
+
+    const makeSubDetails = (label: string) => {
+      const detailsEl = document.createElement('details');
+      detailsEl.className = 'properties-subobject';
+      const summaryEl = document.createElement('summary');
+      summaryEl.className = 'properties-subobject-summary';
+      summaryEl.textContent = label;
+      detailsEl.appendChild(summaryEl);
+      return detailsEl;
+    };
 
     if (isTwirlingAxis || isRgp) {
       const defaultScript = app.getDefaultTwirlingAxisScript();
@@ -295,6 +321,163 @@ export function createPropertiesTab(app: App): HTMLElement {
 
       if (isRgp) {
         const rgpSim = simObject as SimObjectView & { sphereOpacity?: number };
+        const primaryDetails = makeSubDetails('Primary Ring');
+        const primaryBody = document.createElement('div');
+        primaryBody.className = 'properties-subobject-body';
+        const primaryContent = document.createElement('div');
+        primaryContent.className = 'properties-subobject-description';
+        primaryContent.textContent = 'White pulse ring with adaptive brightness.';
+        primaryBody.appendChild(primaryContent);
+
+        const primaryState = simObject.primary;
+        const primaryShadingGroup = document.createElement('div');
+        primaryShadingGroup.className = 'properties-group';
+        const primaryShadingLabel = document.createElement('label');
+        primaryShadingLabel.className = 'properties-label';
+        primaryShadingLabel.textContent = 'Shading Intensity';
+        primaryShadingLabel.htmlFor = `properties-rgp-primary-shading-${simObject.id}`;
+        primaryShadingSlider = document.createElement('input');
+        primaryShadingSlider.type = 'range';
+        primaryShadingSlider.id = `properties-rgp-primary-shading-${simObject.id}`;
+        primaryShadingSlider.min = '0';
+        primaryShadingSlider.max = '1';
+        primaryShadingSlider.step = '0.05';
+        primaryShadingSlider.className = 'sim-speed-slider';
+        primaryShadingSlider.value = primaryState.shadingIntensity.toFixed(2);
+        primaryShadingValue = document.createElement('span');
+        primaryShadingValue.className = 'properties-shading-value';
+        primaryShadingValue.textContent = primaryState.shadingIntensity.toFixed(2);
+        primaryShadingSlider.addEventListener('input', () => {
+          if (!primaryShadingSlider || !primaryShadingValue) {
+            return;
+          }
+          const raw = Number.parseFloat(primaryShadingSlider.value);
+          const clamped = Number.isFinite(raw) ? Math.min(Math.max(raw, 0), 1) : primaryState.shadingIntensity;
+          primaryShadingSlider.value = clamped.toFixed(2);
+          primaryShadingValue.textContent = clamped.toFixed(2);
+          app.selectSimObject(simObject.id);
+          app.updateRgpRingProperties(simObject.id, 'primary', { shadingIntensity: clamped });
+        });
+        primaryShadingGroup.appendChild(primaryShadingLabel);
+        primaryShadingGroup.appendChild(primaryShadingSlider);
+        primaryShadingGroup.appendChild(primaryShadingValue);
+        primaryBody.appendChild(primaryShadingGroup);
+
+        const primaryOpacityGroup = document.createElement('div');
+        primaryOpacityGroup.className = 'properties-group';
+        const primaryOpacityLabel = document.createElement('label');
+        primaryOpacityLabel.className = 'properties-label';
+        primaryOpacityLabel.textContent = 'Opacity';
+        primaryOpacityLabel.htmlFor = `properties-rgp-primary-opacity-${simObject.id}`;
+        primaryOpacitySlider = document.createElement('input');
+        primaryOpacitySlider.type = 'range';
+        primaryOpacitySlider.id = `properties-rgp-primary-opacity-${simObject.id}`;
+        primaryOpacitySlider.min = '0';
+        primaryOpacitySlider.max = '1';
+        primaryOpacitySlider.step = '0.05';
+        primaryOpacitySlider.className = 'sim-speed-slider';
+        primaryOpacitySlider.value = primaryState.opacity.toFixed(2);
+        primaryOpacityValue = document.createElement('span');
+        primaryOpacityValue.className = 'properties-shading-value';
+        primaryOpacityValue.textContent = primaryState.opacity.toFixed(2);
+        primaryOpacitySlider.addEventListener('input', () => {
+          if (!primaryOpacitySlider || !primaryOpacityValue) {
+            return;
+          }
+          const raw = Number.parseFloat(primaryOpacitySlider.value);
+          const clamped = Number.isFinite(raw) ? Math.min(Math.max(raw, 0), 1) : primaryState.opacity;
+          primaryOpacitySlider.value = clamped.toFixed(2);
+          primaryOpacityValue.textContent = clamped.toFixed(2);
+          app.selectSimObject(simObject.id);
+          app.updateRgpRingProperties(simObject.id, 'primary', { opacity: clamped });
+        });
+        primaryOpacityGroup.appendChild(primaryOpacityLabel);
+        primaryOpacityGroup.appendChild(primaryOpacitySlider);
+        primaryOpacityGroup.appendChild(primaryOpacityValue);
+        primaryBody.appendChild(primaryOpacityGroup);
+
+        primaryDetails.appendChild(primaryBody);
+        form.appendChild(primaryDetails);
+
+        const secondaryDetails = makeSubDetails('Secondary Ring');
+        const secondaryBody = document.createElement('div');
+        secondaryBody.className = 'properties-subobject-body';
+        const secondaryContent = document.createElement('div');
+        secondaryContent.className = 'properties-subobject-description';
+        secondaryContent.textContent = 'Red counter-rotating pulse ring.';
+        secondaryBody.appendChild(secondaryContent);
+
+        const secondaryState = simObject.secondary;
+        const secondaryShadingGroup = document.createElement('div');
+        secondaryShadingGroup.className = 'properties-group';
+        const secondaryShadingLabel = document.createElement('label');
+        secondaryShadingLabel.className = 'properties-label';
+        secondaryShadingLabel.textContent = 'Shading Intensity';
+        secondaryShadingLabel.htmlFor = `properties-rgp-secondary-shading-${simObject.id}`;
+        secondaryShadingSlider = document.createElement('input');
+        secondaryShadingSlider.type = 'range';
+        secondaryShadingSlider.id = `properties-rgp-secondary-shading-${simObject.id}`;
+        secondaryShadingSlider.min = '0';
+        secondaryShadingSlider.max = '1';
+        secondaryShadingSlider.step = '0.05';
+        secondaryShadingSlider.className = 'sim-speed-slider';
+        secondaryShadingSlider.value = secondaryState.shadingIntensity.toFixed(2);
+        secondaryShadingValue = document.createElement('span');
+        secondaryShadingValue.className = 'properties-shading-value';
+        secondaryShadingValue.textContent = secondaryState.shadingIntensity.toFixed(2);
+        secondaryShadingSlider.addEventListener('input', () => {
+          if (!secondaryShadingSlider || !secondaryShadingValue) {
+            return;
+          }
+          const raw = Number.parseFloat(secondaryShadingSlider.value);
+          const clamped = Number.isFinite(raw) ? Math.min(Math.max(raw, 0), 1) : secondaryState.shadingIntensity;
+          secondaryShadingSlider.value = clamped.toFixed(2);
+          secondaryShadingValue.textContent = clamped.toFixed(2);
+          app.selectSimObject(simObject.id);
+          app.updateRgpRingProperties(simObject.id, 'secondary', { shadingIntensity: clamped });
+        });
+        secondaryShadingGroup.appendChild(secondaryShadingLabel);
+        secondaryShadingGroup.appendChild(secondaryShadingSlider);
+        secondaryShadingGroup.appendChild(secondaryShadingValue);
+        secondaryBody.appendChild(secondaryShadingGroup);
+
+        const secondaryOpacityGroup = document.createElement('div');
+        secondaryOpacityGroup.className = 'properties-group';
+        const secondaryOpacityLabel = document.createElement('label');
+        secondaryOpacityLabel.className = 'properties-label';
+        secondaryOpacityLabel.textContent = 'Opacity';
+        secondaryOpacityLabel.htmlFor = `properties-rgp-secondary-opacity-${simObject.id}`;
+        secondaryOpacitySlider = document.createElement('input');
+        secondaryOpacitySlider.type = 'range';
+        secondaryOpacitySlider.id = `properties-rgp-secondary-opacity-${simObject.id}`;
+        secondaryOpacitySlider.min = '0';
+        secondaryOpacitySlider.max = '1';
+        secondaryOpacitySlider.step = '0.05';
+        secondaryOpacitySlider.className = 'sim-speed-slider';
+        secondaryOpacitySlider.value = secondaryState.opacity.toFixed(2);
+        secondaryOpacityValue = document.createElement('span');
+        secondaryOpacityValue.className = 'properties-shading-value';
+        secondaryOpacityValue.textContent = secondaryState.opacity.toFixed(2);
+        secondaryOpacitySlider.addEventListener('input', () => {
+          if (!secondaryOpacitySlider || !secondaryOpacityValue) {
+            return;
+          }
+          const raw = Number.parseFloat(secondaryOpacitySlider.value);
+          const clamped = Number.isFinite(raw) ? Math.min(Math.max(raw, 0), 1) : secondaryState.opacity;
+          secondaryOpacitySlider.value = clamped.toFixed(2);
+          secondaryOpacityValue.textContent = clamped.toFixed(2);
+          app.selectSimObject(simObject.id);
+          app.updateRgpRingProperties(simObject.id, 'secondary', { opacity: clamped });
+        });
+        secondaryOpacityGroup.appendChild(secondaryOpacityLabel);
+        secondaryOpacityGroup.appendChild(secondaryOpacitySlider);
+        secondaryOpacityGroup.appendChild(secondaryOpacityValue);
+        secondaryBody.appendChild(secondaryOpacityGroup);
+
+        secondaryDetails.appendChild(secondaryBody);
+        form.appendChild(secondaryDetails);
+
+        const sphereDetails = makeSubDetails('Blue Sphere');
         const sphereOpacityGroup = document.createElement('div');
         sphereOpacityGroup.className = 'properties-group';
         const sphereOpacityLabel = document.createElement('label');
@@ -324,9 +507,13 @@ export function createPropertiesTab(app: App): HTMLElement {
           applyUpdate({ sphereOpacity: clamped } as ObjectUpdate);
         });
         sphereOpacityGroup.appendChild(sphereOpacityLabel);
-        sphereOpacityGroup.appendChild(sphereOpacitySlider);
-        sphereOpacityGroup.appendChild(sphereOpacityValue);
-        form.appendChild(sphereOpacityGroup);
+      sphereOpacityGroup.appendChild(sphereOpacitySlider);
+      sphereOpacityGroup.appendChild(sphereOpacityValue);
+      const sphereBody = document.createElement('div');
+      sphereBody.className = 'properties-subobject-body';
+      sphereBody.appendChild(sphereOpacityGroup);
+        sphereDetails.appendChild(sphereBody);
+        form.appendChild(sphereDetails);
       }
 
       if (isTwirlingAxis) {
@@ -667,6 +854,14 @@ export function createPropertiesTab(app: App): HTMLElement {
       scriptSelect,
       sphereOpacitySlider,
       sphereOpacityValue,
+      primaryShadingSlider,
+      primaryShadingValue,
+      primaryOpacitySlider,
+      primaryOpacityValue,
+      secondaryShadingSlider,
+      secondaryShadingValue,
+      secondaryOpacitySlider,
+      secondaryOpacityValue,
     };
   };
 
@@ -757,6 +952,54 @@ export function createPropertiesTab(app: App): HTMLElement {
         controls.sphereOpacitySlider.dataset.prev = controls.sphereOpacitySlider.value;
         controls.sphereOpacityValue.textContent = defaultSphereOpacity.toFixed(2);
         controls.sphereOpacitySlider.disabled = true;
+      }
+    }
+
+    if (controls.primaryShadingSlider && controls.primaryShadingValue) {
+      if (simObject.type === 'rgpXY') {
+        controls.primaryShadingSlider.value = simObject.primary.shadingIntensity.toFixed(2);
+        controls.primaryShadingValue.textContent = simObject.primary.shadingIntensity.toFixed(2);
+        controls.primaryShadingSlider.disabled = false;
+      } else {
+        controls.primaryShadingSlider.value = '0.00';
+        controls.primaryShadingValue.textContent = '0.00';
+        controls.primaryShadingSlider.disabled = true;
+      }
+    }
+
+    if (controls.primaryOpacitySlider && controls.primaryOpacityValue) {
+      if (simObject.type === 'rgpXY') {
+        controls.primaryOpacitySlider.value = simObject.primary.opacity.toFixed(2);
+        controls.primaryOpacityValue.textContent = simObject.primary.opacity.toFixed(2);
+        controls.primaryOpacitySlider.disabled = false;
+      } else {
+        controls.primaryOpacitySlider.value = '0.00';
+        controls.primaryOpacityValue.textContent = '0.00';
+        controls.primaryOpacitySlider.disabled = true;
+      }
+    }
+
+    if (controls.secondaryShadingSlider && controls.secondaryShadingValue) {
+      if (simObject.type === 'rgpXY') {
+        controls.secondaryShadingSlider.value = simObject.secondary.shadingIntensity.toFixed(2);
+        controls.secondaryShadingValue.textContent = simObject.secondary.shadingIntensity.toFixed(2);
+        controls.secondaryShadingSlider.disabled = false;
+      } else {
+        controls.secondaryShadingSlider.value = '0.00';
+        controls.secondaryShadingValue.textContent = '0.00';
+        controls.secondaryShadingSlider.disabled = true;
+      }
+    }
+
+    if (controls.secondaryOpacitySlider && controls.secondaryOpacityValue) {
+      if (simObject.type === 'rgpXY') {
+        controls.secondaryOpacitySlider.value = simObject.secondary.opacity.toFixed(2);
+        controls.secondaryOpacityValue.textContent = simObject.secondary.opacity.toFixed(2);
+        controls.secondaryOpacitySlider.disabled = false;
+      } else {
+        controls.secondaryOpacitySlider.value = '0.00';
+        controls.secondaryOpacityValue.textContent = '0.00';
+        controls.secondaryOpacitySlider.disabled = true;
       }
     }
 
