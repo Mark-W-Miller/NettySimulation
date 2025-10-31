@@ -22,6 +22,7 @@ import {
   type SphereObjectDefinition,
   type TwirlObjectDefinition,
   type TwirlingAxisObjectDefinition,
+  type RgpXYObjectDefinition,
   type SimObjectDefinition,
 } from '../engine/assets/simTypes';
 import { CameraController } from './camera';
@@ -42,6 +43,56 @@ import {
 } from './math3d';
 
 const MAX_GHOST_PARTICLES = 4000;
+const DEFAULT_TWIRLING_AXIS_SCRIPT = '+X90 -Y90 +Z90 -X90 +Y90 -Z90';
+const SCRIPT_PRESETS: Array<{ label: string; script: string }> = [
+  { label: 'Default (+X90 -Y90 +Z90 ...)', script: DEFAULT_TWIRLING_AXIS_SCRIPT },
+  { label: 'Gentle Spiral (+X45 +Y45 ...)', script: '+X45 +Y45 +Z45 -X45 -Y45 -Z45' },
+  { label: 'Half-Turn Loop (+X90 +X90 ...)', script: '+X90 +X90 -Y180 +Z90 +Z90 -X180' },
+  { label: 'Lopsided Flower (+Y120 ...)', script: '+Y120 -Z60 +X120 -Y60 +Z120 -X60' },
+  { label: 'Clover Flip (+Z180 ...)', script: '+Z180 +X90 +Z180 -X90' },
+  { label: 'Variable Sweep (+X30 ...)', script: '+X30 +Y60 +Z90 -X120 -Y60 -Z30' },
+];
+
+const RGP_SPHERE_COLOR = new Float32Array([0.42, 0.68, 0.93]);
+const RGP_SPHERE_OPACITY = 0.12;
+
+const RGP_PRIMARY_CONFIG = {
+  shellScale: 20 / 24,
+  speedPerTick: 1,
+  direction: 1 as 1 | -1,
+  plane: 'GB' as const,
+  baseColor: 'white' as BaseColor,
+  shadingIntensity: 0.35,
+  opacity: 1,
+  beltHalfAngle: 0.18,
+  pulseSpeed: 0.75,
+  initialRotationY: Math.PI / 6,
+  initialPulsePhase: 0.5,
+  initialPulseScale: 0.25,
+  invertPulse: true,
+};
+
+const RGP_SECONDARY_CONFIG = {
+  shellScale: 28 / 24,
+  speedPerTick: 0.9,
+  direction: 1 as 1 | -1,
+  plane: 'YG' as const,
+  baseColor: 'red' as BaseColor,
+  shadingIntensity: 0.45,
+  opacity: 1,
+  beltHalfAngle: 0.22,
+  pulseSpeed: 0.75,
+  initialRotationY: Math.PI / 6,
+  initialPulsePhase: 0.5,
+  initialPulseScale: 1,
+  invertPulse: false,
+};
+
+interface RotationStep {
+  axis: 'x' | 'y' | 'z';
+  direction: 1 | -1;
+  angleDeg: number;
+}
 
 interface BaseSimObject {
   id: string;
@@ -84,9 +135,70 @@ interface TwirlingAxisObject {
   visible: boolean;
   size: number;
   opacity: number;
+  rotationScript: RotationStep[];
+  rotationScriptSource: string;
+  scriptIndex: number;
+  beatAccumulator: number;
+  currentDirection: 1 | -1;
 }
 
-type SimObject = SphereObject | TwirlObject | TwirlingAxisObject;
+interface RgpRingConfig {
+  shellScale: number;
+  speedPerTick: number;
+  direction: 1 | -1;
+  plane: 'YG' | 'GB' | 'YB';
+  baseColor: BaseColor;
+  shadingIntensity: number;
+  opacity: number;
+  beltHalfAngle: number;
+  pulseSpeed: number;
+  initialRotationY: number;
+  initialPulsePhase: number;
+  initialPulseScale: number;
+  invertPulse: boolean;
+}
+
+interface RgpRingState {
+  rotationY: number;
+  speedPerTick: number;
+  direction: 1 | -1;
+  plane: 'YG' | 'GB' | 'YB';
+  shellScale: number;
+  baseColor: BaseColor;
+  shadingIntensity: number;
+  opacity: number;
+  beltHalfAngle: number;
+  pulseSpeed: number;
+  pulsePhase: number;
+  pulseScale: number;
+  invertPulse: boolean;
+}
+
+interface RgpXYObject {
+  type: 'rgpXY';
+  id: string;
+  mesh: TwirlMesh;
+  size: number;
+  visible: boolean;
+  speedPerTick: number;
+  direction: 1 | -1;
+  primary: RgpRingState;
+  secondary: RgpRingState;
+  sphereColor: Float32Array;
+  sphereOpacity: number;
+}
+
+interface Dexel {
+  axis: 'x' | 'y' | 'z';
+  sign: 1 | -1;
+  position: Float32Array;
+  mesh: TwirlMesh;
+  size: number;
+  primary: RgpRingState;
+  secondary: RgpRingState;
+}
+
+type SimObject = SphereObject | TwirlObject | TwirlingAxisObject | RgpXYObject;
 
 interface GhostParticle {
   position: Float32Array;
@@ -104,12 +216,10 @@ type SimObjectUpdatePayload = Partial<{
   visible: boolean;
   shadingIntensity: number;
   opacity: number;
-  spinX: boolean;
-  spinY: boolean;
-  spinZ: boolean;
   size: number;
   beltHalfAngle: number;
   pulseSpeed: number;
+  sphereOpacity: number;
 }>; 
 
 interface SimulationSegmentDefinition {
@@ -136,8 +246,8 @@ export class App {
   private sphereSegments = { lat: 48, lon: 48 };
   private shadingIntensity = 0.4;
   private ghostParticles: GhostParticle[] = [];
-  private ghostBeatAccumulator = 0;
-  private twirlingAxisStepIndex = 0;
+  private dexels: Dexel[] = [];
+  private dexelLastSign: Record<'x' | 'y' | 'z', 1 | -1> = { x: 1, y: 1, z: 1 };
 
   private readonly camera = new CameraController();
   private readonly identityModelMatrix = mat4Identity();
@@ -210,38 +320,10 @@ export class App {
       name: 'RGP Formation',
       objects: [
         {
-          type: 'twirl',
-          id: 'white-ring',
-          speedPerTick: 1,
-          direction: 1,
-          plane: 'GB',
-          shellSize: 20,
-          baseColor: 'white',
+          type: 'rgpXY',
+          id: 'rgp-xy',
+          size: 24,
           visible: true,
-          shadingIntensity: 0.35,
-          opacity: 1,
-          beltHalfAngle: 0.18,
-          pulseSpeed: 0.75,
-          initialRotationY: Math.PI / 6,
-          initialPulsePhase: 0.5,
-          initialPulseScale: 0.25,
-        },
-        {
-          type: 'twirl',
-          id: 'red-ring',
-          speedPerTick: 0.9,
-          direction: 1,
-          plane: 'YG',
-          shellSize: 28,
-          baseColor: 'red',
-          visible: true,
-          shadingIntensity: 0.45,
-          opacity: 1,
-          beltHalfAngle: 0.22,
-          pulseSpeed: 0.75,
-          initialRotationY: Math.PI / 6,
-          initialPulsePhase: 0.5,
-          initialPulseScale: 1,
         },
         {
           type: 'twirling-axis',
@@ -249,9 +331,6 @@ export class App {
           speedPerTick: 10,
           direction: 1,
           visible: true,
-          spinX: false,
-          spinY: true,
-          spinZ: true,
           size: 1,
           initialRotationY: 0,
           initialRotationZ: 0,
@@ -407,8 +486,8 @@ export class App {
     this.axes = null;
     this.rotatedAxes = null;
     this.ghostParticles = [];
-    this.ghostBeatAccumulator = 0;
-    this.twirlingAxisStepIndex = 0;
+    this.dexels = [];
+    this.dexelLastSign = { x: 1, y: 1, z: 1 };
     this.simObjects.length = 0;
     this.simRunning = false;
     this.selectedObjectId = null;
@@ -487,6 +566,7 @@ export class App {
     const sphereQueue: SphereObject[] = [];
     const twirlQueue: TwirlObject[] = [];
     const twirlingAxisQueue: TwirlingAxisObject[] = [];
+    const rgpQueue: RgpXYObject[] = [];
 
     for (const simObject of this.simObjects) {
       if (!simObject.visible) {
@@ -498,6 +578,23 @@ export class App {
           this.advanceTwirlingAxis(simObject, beats);
         }
         twirlingAxisQueue.push(simObject);
+        continue;
+      }
+
+      if (simObject.type === 'rgpXY') {
+        if (beats > 0) {
+          const rotationDeltaPrimary = beats * this.rotationPerBeat * simObject.primary.speedPerTick * simObject.primary.direction;
+          const rotationDeltaSecondary = beats * this.rotationPerBeat * simObject.secondary.speedPerTick * simObject.secondary.direction;
+          simObject.primary.rotationY += rotationDeltaPrimary;
+          simObject.secondary.rotationY += rotationDeltaSecondary;
+        }
+
+        if (this.simRunning) {
+          this.updateRgpPulse(simObject.primary, deltaSeconds);
+          this.updateRgpPulse(simObject.secondary, deltaSeconds);
+        }
+
+        rgpQueue.push(simObject);
         continue;
       }
 
@@ -518,10 +615,6 @@ export class App {
       }
     }
 
-    if (beats > 0 && twirlingAxisQueue.length > 0) {
-      this.spawnGhostParticles(beats, twirlingAxisQueue);
-    }
-
     for (const sphereObject of sphereQueue) {
       const { modelMatrix, normalMatrix } = this.computeModelMatrices(sphereObject);
       Assets.drawSphere(gl, sphereProgram, sphereObject.mesh, {
@@ -535,7 +628,14 @@ export class App {
       });
     }
 
-    if (twirlQueue.length > 0) {
+    for (const rgpObject of rgpQueue) {
+      this.drawRgpSphere(gl, sphereProgram, rgpObject);
+    }
+
+    const patternRepeats = Math.max(1, this.sphereSegments.lon / 2);
+    const hasTwirlContent = twirlQueue.length > 0 || rgpQueue.length > 0 || this.dexels.length > 0;
+
+    if (hasTwirlContent) {
       const sortedTwirlQueue = [...twirlQueue].sort((a, b) => b.shellSize - a.shellSize);
 
       Assets.useTwirlProgram(gl, twirlProgram);
@@ -553,7 +653,7 @@ export class App {
           shadingIntensity: twirlObject.shadingIntensity,
           beltHalfAngle: twirlObject.beltHalfAngle,
           pulseScale: twirlObject.pulseScale,
-          patternRepeats: Math.max(1, this.sphereSegments.lon / 2),
+          patternRepeats,
           patternOffset: ((twirlObject.rotationY / (Math.PI * 2)) % 1 + 1) % 1,
           opacityIntensity: twirlObject.opacity,
           clipEnabled: false,
@@ -561,6 +661,13 @@ export class App {
           clipRadius: 0,
         });
       }
+
+      for (const rgpObject of rgpQueue) {
+        this.drawRgpRing(gl, twirlProgram, rgpObject.mesh, rgpObject.size, rgpObject.secondary, patternRepeats);
+        this.drawRgpRing(gl, twirlProgram, rgpObject.mesh, rgpObject.size, rgpObject.primary, patternRepeats);
+      }
+
+      this.drawDexels(gl, twirlProgram, patternRepeats);
 
       gl.disable(gl.BLEND);
 
@@ -637,8 +744,6 @@ export class App {
     }
 
     this.ghostParticles = [];
-    this.ghostBeatAccumulator = 0;
-    this.twirlingAxisStepIndex = 0;
 
     this.simObjects.length = 0;
     for (const objectDef of segment.objects) {
@@ -670,8 +775,27 @@ export class App {
           pulsePhase: initialPhase,
           pulseScale: initialScale,
         });
+      } else if (objectDef.type === 'rgpXY') {
+        const mesh = this.ensureTwirlMesh();
+        const primary = this.createRgpRingState(RGP_PRIMARY_CONFIG);
+        const secondary = this.createRgpRingState(RGP_SECONDARY_CONFIG);
+        this.simObjects.push({
+          type: 'rgpXY',
+          id: objectDef.id,
+          mesh,
+          size: Math.max(0.1, objectDef.size),
+          visible: objectDef.visible ?? true,
+          speedPerTick: 1,
+          direction: 1,
+          primary,
+          secondary,
+          sphereColor: new Float32Array(RGP_SPHERE_COLOR),
+          sphereOpacity: RGP_SPHERE_OPACITY,
+        });
       } else if (objectDef.type === 'twirling-axis') {
         const mesh = this.ensureTwirlingAxisMesh();
+        const scriptSource = objectDef.rotationScript ?? DEFAULT_TWIRLING_AXIS_SCRIPT;
+        const { steps, normalized } = this.safeParseRotationScript(scriptSource);
         this.simObjects.push({
           type: 'twirling-axis',
           id: objectDef.id,
@@ -684,6 +808,11 @@ export class App {
           visible: objectDef.visible ?? true,
           size: Math.max(0.01, objectDef.size ?? 1),
           opacity: clamp(objectDef.opacity ?? 1, 0, 1),
+          rotationScript: steps,
+          rotationScriptSource: normalized,
+          scriptIndex: 0,
+          beatAccumulator: 0,
+          currentDirection: objectDef.direction >= 0 ? 1 : -1,
         });
       } else {
         const mesh = this.ensureSphereMesh();
@@ -797,7 +926,8 @@ export class App {
     const targetSegment = this.selectedSegmentId ?? this.segmentDefinitions[0]?.id ?? null;
     this.stopSimulation();
     this.ghostParticles = [];
-    this.ghostBeatAccumulator = 0;
+    this.dexels = [];
+    this.dexelLastSign = { x: 1, y: 1, z: 1 };
     if (targetSegment) {
       this.loadSegment(targetSegment);
     } else {
@@ -871,11 +1001,15 @@ export class App {
     }
 
     if (typeof update.speedPerTick === 'number' && Number.isFinite(update.speedPerTick)) {
-      selected.speedPerTick = Math.max(0.1, update.speedPerTick);
+      if (selected.type !== 'rgpXY') {
+        selected.speedPerTick = Math.max(0.1, update.speedPerTick);
+      }
     }
 
     if (update.direction !== undefined) {
-      selected.direction = update.direction >= 0 ? 1 : -1;
+      if (selected.type !== 'rgpXY') {
+        selected.direction = update.direction >= 0 ? 1 : -1;
+      }
     }
 
     if (typeof update.visible === 'boolean') {
@@ -886,23 +1020,21 @@ export class App {
       const clampedOpacity = clamp(update.opacity, 0, 1);
       if (selected.type === 'twirling-axis') {
         selected.opacity = clampedOpacity;
-      } else {
+      } else if (selected.type === 'sphere' || selected.type === 'twirl') {
         selected.opacity = clampedOpacity;
       }
     }
 
     if (selected.type === 'twirling-axis') {
-      if (typeof update.spinX === 'boolean') {
-        selected.spinX = update.spinX;
-      }
-      if (typeof update.spinY === 'boolean') {
-        selected.spinY = update.spinY;
-      }
-      if (typeof update.spinZ === 'boolean') {
-        selected.spinZ = update.spinZ;
-      }
       if (typeof update.size === 'number' && Number.isFinite(update.size)) {
         selected.size = Math.max(0.01, update.size);
+      }
+    } else if (selected.type === 'rgpXY') {
+      if (typeof update.size === 'number' && Number.isFinite(update.size)) {
+        selected.size = Math.max(0.1, update.size);
+      }
+      if (typeof update.sphereOpacity === 'number' && Number.isFinite(update.sphereOpacity)) {
+        selected.sphereOpacity = clamp(update.sphereOpacity, 0, 1);
       }
     } else {
       if (update.plane) {
@@ -941,11 +1073,10 @@ export class App {
     }
   }
 
-  private computeModelMatrices(simObject: SimObject): { modelMatrix: Float32Array; normalMatrix: Float32Array } {
-    if (simObject.type === 'twirling-axis') {
-      return this.computeTwirlingAxisMatrices(simObject);
-    }
-
+  private computeModelMatrices(simObject: SphereObject | TwirlObject): {
+    modelMatrix: Float32Array;
+    normalMatrix: Float32Array;
+  } {
     let rotationMatrix: Float32Array;
     let alignmentMatrix: Float32Array;
 
@@ -992,16 +1123,13 @@ export class App {
     simObject: TwirlingAxisObject,
   ): { modelMatrix: Float32Array; normalMatrix: Float32Array } {
     let rotationMatrix = mat4Identity();
-
-    if (simObject.spinY || simObject.rotationY !== 0) {
+    if (simObject.rotationY !== 0) {
       rotationMatrix = mat4Multiply(rotationMatrix, mat4FromYRotation(simObject.rotationY));
     }
-
-    if (simObject.spinZ || simObject.rotationZ !== 0) {
+    if (simObject.rotationZ !== 0) {
       rotationMatrix = mat4Multiply(rotationMatrix, mat4FromZRotation(simObject.rotationZ));
     }
-
-    if (simObject.spinX || simObject.rotationX !== 0) {
+    if (simObject.rotationX !== 0) {
       rotationMatrix = mat4Multiply(rotationMatrix, mat4FromXRotation(simObject.rotationX));
     }
 
@@ -1015,7 +1143,7 @@ export class App {
     };
   }
 
-  private getPlaneNormal(plane: SimObject['plane']): Float32Array {
+  private getPlaneNormal(plane: 'YG' | 'GB' | 'YB'): Float32Array {
     switch (plane) {
       case 'GB':
         return new Float32Array([0, 1, 0]);
@@ -1067,15 +1195,6 @@ export class App {
     }
   }
 
-  private spawnGhostParticles(beats: number, axisObjects: TwirlingAxisObject[]): void {
-    if (!this.simRunning || beats <= 0) {
-      return;
-    }
-
-    const halfLength = TWIRLING_AXIS_BASE_LENGTH / 2;
-    // Ghost particles are emitted via advanceTwirlingAxis per completed step.
-  }
-
   private addGhostParticle(position: Float32Array, color: [number, number, number], radius: number, opacity: number): void {
     this.ghostParticles.push({
       position,
@@ -1089,49 +1208,244 @@ export class App {
     }
   }
 
+  private parseRotationScript(source: string): { steps: RotationStep[]; normalized: string } {
+    const trimmed = source.trim();
+    if (!trimmed) {
+      throw new Error('Rotation script is empty');
+    }
+
+    const tokens = trimmed.split(/\s+/).filter(Boolean);
+    if (tokens.length === 0) {
+      throw new Error('Rotation script is empty');
+    }
+
+    const steps: RotationStep[] = [];
+    const normalizedTokens: string[] = [];
+
+    for (const token of tokens) {
+      const match = token.match(/^([+-])([XYZxyz])(\d+)$/);
+      if (!match) {
+        throw new Error(`Invalid token: ${token}`);
+      }
+      const [, sign, axisChar, angleStr] = match;
+      const angleDeg = Number.parseInt(angleStr, 10);
+      if (!Number.isFinite(angleDeg) || angleDeg <= 0) {
+        throw new Error(`Invalid angle in token: ${token}`);
+      }
+
+      const axis = axisChar.toLowerCase() as RotationStep['axis'];
+      const direction = sign === '+' ? 1 : -1;
+      steps.push({ axis, direction, angleDeg });
+      normalizedTokens.push(`${sign}${axisChar.toUpperCase()}${angleDeg}`);
+    }
+
+    return {
+      steps,
+      normalized: normalizedTokens.join(' '),
+    };
+  }
+
+  private safeParseRotationScript(source: string): { steps: RotationStep[]; normalized: string } {
+    try {
+      return this.parseRotationScript(source);
+    } catch (error) {
+      return this.parseRotationScript(DEFAULT_TWIRLING_AXIS_SCRIPT);
+    }
+  }
+
   private advanceTwirlingAxis(simObject: TwirlingAxisObject, beats: number): void {
-    const stepDurationBeats = 3; // 90-degree rotation at rotationPerBeat
-    this.ghostBeatAccumulator += beats;
+    if (!this.simRunning || beats <= 0) {
+      return;
+    }
 
-    while (this.ghostBeatAccumulator >= stepDurationBeats) {
-      this.ghostBeatAccumulator -= stepDurationBeats;
+    if (simObject.rotationScript.length === 0) {
+      return;
+    }
 
-      const step = this.twirlingAxisStepIndex % 6;
-      switch (step) {
-        case 0:
-          simObject.rotationX += Math.PI / 2;
+    const speedMultiplier = Math.max(0.01, Math.abs(simObject.speedPerTick));
+    simObject.beatAccumulator += beats * speedMultiplier;
+    while (simObject.beatAccumulator >= 1) {
+      simObject.beatAccumulator -= 1;
+
+      const step = simObject.rotationScript[simObject.scriptIndex];
+      if (!step) {
+        break;
+      }
+
+      const angleRad = (step.angleDeg * Math.PI) / 180;
+      const rotationSign = (simObject.direction >= 0 ? 1 : -1) * (simObject.speedPerTick >= 0 ? 1 : -1) * simObject.currentDirection;
+      const delta = angleRad * step.direction * rotationSign;
+
+      switch (step.axis) {
+        case 'x':
+          simObject.rotationX += delta;
           break;
-        case 1:
-          simObject.rotationY += Math.PI / 2;
+        case 'y':
+          simObject.rotationY += delta;
           break;
-        case 2:
-          simObject.rotationZ += Math.PI / 2;
-          break;
-        case 3:
-          simObject.rotationX -= Math.PI / 2;
-          break;
-        case 4:
-          simObject.rotationY -= Math.PI / 2;
-          break;
-        case 5:
-          simObject.rotationZ -= Math.PI / 2;
+        case 'z':
+          simObject.rotationZ += delta;
           break;
       }
 
-      this.twirlingAxisStepIndex = (this.twirlingAxisStepIndex + 1) % 6;
+      simObject.scriptIndex = (simObject.scriptIndex + 1) % simObject.rotationScript.length;
+      simObject.currentDirection = (simObject.currentDirection === 1 ? -1 : 1);
 
-      const halfLength = TWIRLING_AXIS_BASE_LENGTH / 2;
-      const { modelMatrix } = this.computeTwirlingAxisMatrices(simObject);
-      const sizeScale = Math.max(0.01, simObject.size);
-      const ballRadius = TWIRLING_AXIS_BASE_RADIUS * TWIRLING_AXIS_BALL_SCALE * sizeScale * 0.5;
-      const ghostOpacity = clamp(simObject.opacity * 0.7, 0.05, 1);
-
-      const xTip = this.transformPoint(modelMatrix, [halfLength, 0, 0]);
-      const yTip = this.transformPoint(modelMatrix, [0, halfLength, 0]);
-
-      this.addGhostParticle(xTip, AXIS_COLORS.x, ballRadius, ghostOpacity);
-      this.addGhostParticle(yTip, AXIS_COLORS.y, ballRadius, ghostOpacity);
+      this.emitGhostParticlesFromAxis(simObject);
     }
+  }
+
+  private emitGhostParticlesFromAxis(simObject: TwirlingAxisObject): void {
+    const halfLength = TWIRLING_AXIS_BASE_LENGTH / 2;
+    const { modelMatrix } = this.computeTwirlingAxisMatrices(simObject);
+    const sizeScale = Math.max(0.01, simObject.size);
+    const ballRadius = TWIRLING_AXIS_BASE_RADIUS * TWIRLING_AXIS_BALL_SCALE * sizeScale * 0.5;
+    const ghostOpacity = clamp(simObject.opacity * 0.7, 0.05, 1);
+
+    const xTip = this.transformPoint(modelMatrix, [halfLength, 0, 0]);
+    const yTip = this.transformPoint(modelMatrix, [0, halfLength, 0]);
+
+    this.addGhostParticle(xTip, AXIS_COLORS.x, ballRadius, ghostOpacity);
+    this.addGhostParticle(yTip, AXIS_COLORS.y, ballRadius, ghostOpacity);
+  }
+
+  private drawRgpSphere(gl: WebGLRenderingContext, sphereProgram: SphereProgram, rgp: RgpXYObject): void {
+    const mesh = this.ensureSphereMesh();
+    const scaleFactor = Math.max(0.1, rgp.size / this.defaultShellSize);
+    const modelMatrix = mat4ScaleUniform(scaleFactor);
+    const baseColor = new Float32Array([rgp.sphereColor[0], rgp.sphereColor[1], rgp.sphereColor[2], clamp(rgp.sphereOpacity, 0, 1)]);
+
+    const wasBlending = gl.isEnabled(gl.BLEND);
+    const previousDepthMask = gl.getParameter(gl.DEPTH_WRITEMASK) as boolean;
+
+    if (!wasBlending) {
+      gl.enable(gl.BLEND);
+    }
+    gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+    gl.depthMask(false);
+
+    Assets.drawSphere(gl, sphereProgram, mesh, {
+      modelMatrix,
+      normalMatrix: this.identityNormalMatrix,
+      shadingIntensity: 0,
+      planeVector: this.originVector,
+      baseColor,
+      vertexColorWeight: 0,
+      opacityIntensity: rgp.sphereOpacity,
+    });
+
+    gl.depthMask(previousDepthMask);
+    if (!wasBlending) {
+      gl.disable(gl.BLEND);
+    }
+  }
+
+  private createRgpRingState(config: RgpRingConfig): RgpRingState {
+    return {
+      rotationY: config.initialRotationY,
+      speedPerTick: config.speedPerTick,
+      direction: config.direction,
+      plane: config.plane,
+      shellScale: config.shellScale,
+      baseColor: config.baseColor,
+      shadingIntensity: config.shadingIntensity,
+      opacity: config.opacity,
+      beltHalfAngle: config.beltHalfAngle,
+      pulseSpeed: config.pulseSpeed,
+      pulsePhase: config.initialPulsePhase,
+      pulseScale: config.initialPulseScale,
+      invertPulse: config.invertPulse,
+    };
+  }
+
+  private updateRgpPulse(ring: RgpRingState, deltaSeconds: number): void {
+    ring.pulsePhase = (ring.pulsePhase + deltaSeconds * ring.pulseSpeed * 0.25) % 1;
+    const triangle = ring.pulsePhase < 0.5 ? ring.pulsePhase * 2 : (1 - (ring.pulsePhase - 0.5) * 2);
+    const baseTriangle = ring.invertPulse ? 1 - triangle : triangle;
+    ring.pulseScale = 0.25 + 0.75 * baseTriangle;
+  }
+
+  private drawRgpRing(
+    gl: WebGLRenderingContext,
+    twirlProgram: TwirlProgram,
+    mesh: TwirlMesh,
+    size: number,
+    ring: RgpRingState,
+    patternRepeats: number,
+    position?: Float32Array,
+  ): void {
+    const shellSize = Math.max(1, size * ring.shellScale);
+    const { modelMatrix, normalMatrix } = this.buildTwirlMatrices(
+      ring.plane,
+      ring.rotationY,
+      shellSize,
+      ring.pulseScale,
+      ring.beltHalfAngle,
+    );
+
+    const baseColor = this.getBaseColorVector(ring.baseColor, ring.opacity);
+    const patternOffset = ((ring.rotationY / (Math.PI * 2)) % 1 + 1) % 1;
+
+    const finalModelMatrix = position
+      ? mat4Multiply(this.translationMatrix(position), modelMatrix)
+      : modelMatrix;
+
+    Assets.drawTwirl(gl, twirlProgram, mesh, {
+      modelMatrix: finalModelMatrix,
+      normalMatrix,
+      baseColor,
+      planeVector: this.getPlaneNormal(ring.plane),
+      shadingIntensity: ring.shadingIntensity,
+      beltHalfAngle: ring.beltHalfAngle,
+      pulseScale: ring.pulseScale,
+      patternRepeats,
+      patternOffset,
+      opacityIntensity: ring.opacity,
+      clipEnabled: false,
+      clipCenter: this.originVector,
+      clipRadius: 0,
+    });
+  }
+
+  private buildTwirlMatrices(
+    plane: 'YG' | 'GB' | 'YB',
+    rotationY: number,
+    shellSize: number,
+    pulseScale: number,
+    beltHalfAngle: number,
+  ): { modelMatrix: Float32Array; normalMatrix: Float32Array } {
+    let rotationMatrix: Float32Array;
+    let alignmentMatrix: Float32Array;
+
+    switch (plane) {
+      case 'GB':
+        rotationMatrix = mat4FromYRotation(rotationY);
+        alignmentMatrix = this.identityModelMatrix;
+        break;
+      case 'YG':
+        rotationMatrix = mat4FromZRotation(rotationY);
+        alignmentMatrix = this.alignYAxisToZMatrix;
+        break;
+      case 'YB':
+        rotationMatrix = mat4FromXRotation(rotationY);
+        alignmentMatrix = this.alignYAxisToXMatrix;
+        break;
+      default:
+        rotationMatrix = mat4FromYRotation(rotationY);
+        alignmentMatrix = this.identityModelMatrix;
+        break;
+    }
+
+    const rotationAndAlignment = mat4Multiply(rotationMatrix, alignmentMatrix);
+    const radiusScale = Math.max(0.05, (shellSize / this.defaultShellSize) * pulseScale);
+    const heightScale = Math.max(0.01, Math.sin(beltHalfAngle));
+    const scaleMatrix = mat4Scale(Math.max(radiusScale, 0.01), Math.max(heightScale, 0.005), Math.max(radiusScale, 0.01));
+    const modelMatrix = mat4Multiply(rotationAndAlignment, scaleMatrix);
+
+    return {
+      modelMatrix,
+      normalMatrix: mat3FromMat4(rotationAndAlignment),
+    };
   }
 
   private drawGhostParticles(gl: WebGLRenderingContext, sphereProgram: SphereProgram): void {
@@ -1180,6 +1494,107 @@ export class App {
     return mat4Multiply(translation, scaleMatrix);
   }
 
+  private translationMatrix(position: Float32Array): Float32Array {
+    const translation = mat4Identity();
+    translation[12] = position[0];
+    translation[13] = position[1];
+    translation[14] = position[2];
+    return translation;
+  }
+
+  private drawDexels(gl: WebGLRenderingContext, twirlProgram: TwirlProgram, patternRepeats: number): void {
+    if (this.dexels.length === 0) {
+      return;
+    }
+
+    for (const dexel of this.dexels) {
+      this.drawRgpRing(gl, twirlProgram, dexel.mesh, dexel.size, dexel.secondary, patternRepeats, dexel.position);
+      this.drawRgpRing(gl, twirlProgram, dexel.mesh, dexel.size, dexel.primary, patternRepeats, dexel.position);
+    }
+  }
+
+  spawnDexelForSelectedRgp(): void {
+    const selected = this.getSelectedSimObject();
+    if (!selected || selected.type !== 'rgpXY') {
+      return;
+    }
+    this.spawnDexelForRgp(selected);
+  }
+
+  private spawnDexelForRgp(rgp: RgpXYObject): void {
+    const dominant = rgp.primary.pulseScale >= rgp.secondary.pulseScale ? rgp.primary : rgp.secondary;
+    const axis = this.planeToAxis(dominant.plane);
+    const sign = this.dexelLastSign[axis];
+    const axisIndex = axis === 'x' ? 0 : axis === 'y' ? 1 : 2;
+    const distance = Math.max(0.1, rgp.size / this.defaultShellSize);
+
+    const position = new Float32Array([0, 0, 0]);
+    position[axisIndex] = sign * distance;
+
+    const existing = this.dexels.some((dexel) => dexel.axis === axis && dexel.sign === sign);
+    if (existing) {
+      return;
+    }
+
+    this.dexelLastSign[axis] = sign === 1 ? -1 : 1;
+
+    const primaryConfig: RgpRingConfig = {
+      ...RGP_PRIMARY_CONFIG,
+      speedPerTick: 0,
+      direction: 1,
+      initialRotationY: 0,
+      initialPulsePhase: 0,
+      initialPulseScale: 1,
+      pulseSpeed: 0,
+      invertPulse: RGP_PRIMARY_CONFIG.invertPulse,
+    };
+    const secondaryConfig: RgpRingConfig = {
+      ...RGP_SECONDARY_CONFIG,
+      speedPerTick: 0,
+      direction: 1,
+      initialRotationY: 0,
+      initialPulsePhase: 0,
+      initialPulseScale: 1,
+      pulseSpeed: 0,
+      invertPulse: RGP_SECONDARY_CONFIG.invertPulse,
+    };
+
+    const primary = this.createRgpRingState(primaryConfig);
+    const secondary = this.createRgpRingState(secondaryConfig);
+
+    primary.pulseScale = 1;
+    primary.pulsePhase = 0;
+    primary.pulseSpeed = 0;
+    secondary.pulseScale = 1;
+    secondary.pulsePhase = 0;
+    secondary.pulseSpeed = 0;
+
+    this.dexels.push({
+      axis,
+      sign,
+      position,
+      mesh: rgp.mesh,
+      primary,
+      secondary,
+      size: rgp.size,
+    });
+
+    this.notifySimChange();
+  }
+
+  private planeToAxis(plane: 'YG' | 'GB' | 'YB'): 'x' | 'y' | 'z' {
+    switch (plane) {
+      case 'GB':
+        return 'y';
+      case 'YG':
+        return 'z';
+      case 'YB':
+        return 'x';
+      default:
+        return 'x';
+    }
+  }
+
   getAxisVisibility(): Readonly<Record<'x' | 'y' | 'z', boolean>> {
     return { ...this.axisVisibility };
   }
@@ -1224,6 +1639,39 @@ export class App {
     this.axisRadiusScale = clamped;
     this.rebuildAxisMeshes();
     this.notifySimChange();
+  }
+
+  setSelectedTwirlingAxisRotationScript(script: string): boolean {
+    const selected = this.getSelectedSimObject();
+    if (!selected || selected.type !== 'twirling-axis') {
+      return false;
+    }
+
+    try {
+      const { steps, normalized } = this.parseRotationScript(script);
+      selected.rotationScript = steps;
+      selected.rotationScriptSource = normalized;
+      selected.scriptIndex = 0;
+      selected.beatAccumulator = 0;
+      selected.currentDirection = 1;
+      this.ghostParticles = [];
+      this.notifySimChange();
+      return true;
+    } catch (error) {
+      return false;
+    }
+  }
+
+  getDefaultTwirlingAxisScript(): string {
+    return DEFAULT_TWIRLING_AXIS_SCRIPT;
+  }
+
+  getTwirlingAxisScriptPresets(): ReadonlyArray<{ label: string; script: string }> {
+    return SCRIPT_PRESETS;
+  }
+
+  getDefaultRgpSphereOpacity(): number {
+    return RGP_SPHERE_OPACITY;
   }
 
   private getAxisOpacityAlpha(): number {
@@ -1286,7 +1734,7 @@ export class App {
 
   getShadingIntensity(): number {
     const selected = this.getSelectedSimObject();
-    if (selected && selected.type !== 'twirling-axis') {
+    if (selected && (selected.type === 'sphere' || selected.type === 'twirl')) {
       return selected.shadingIntensity;
     }
     return this.shadingIntensity;
@@ -1295,7 +1743,7 @@ export class App {
   setShadingIntensity(intensity: number): void {
     const clamped = clamp(intensity, 0, 1);
     const selected = this.getSelectedSimObject();
-    if (selected && selected.type !== 'twirling-axis') {
+    if (selected && (selected.type === 'sphere' || selected.type === 'twirl')) {
       if (selected.shadingIntensity === clamped) {
         return;
       }

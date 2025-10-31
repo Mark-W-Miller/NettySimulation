@@ -43,8 +43,6 @@ export function createPropertiesTab(app: App): HTMLElement {
     summaryLabel: HTMLSpanElement;
     visibilityCheckbox: HTMLInputElement;
     speedInput: HTMLInputElement;
-    directionCW: HTMLInputElement;
-    directionCCW: HTMLInputElement;
     planeYG?: HTMLInputElement;
     planeGB?: HTMLInputElement;
     planeYB?: HTMLInputElement;
@@ -52,16 +50,17 @@ export function createPropertiesTab(app: App): HTMLElement {
     baseColorSelect?: HTMLSelectElement;
     shadingSlider?: HTMLInputElement;
     shadingValue?: HTMLSpanElement;
-    opacitySlider?: HTMLInputElement;
-    opacityValue?: HTMLSpanElement;
-    latInput: HTMLInputElement;
-    lonInput: HTMLInputElement;
-    beltInput?: HTMLInputElement;
-    pulseInput?: HTMLInputElement;
-    spinXCheckbox?: HTMLInputElement;
-    spinYCheckbox?: HTMLInputElement;
-    spinZCheckbox?: HTMLInputElement;
-    sizeInput?: HTMLInputElement;
+  opacitySlider?: HTMLInputElement;
+  opacityValue?: HTMLSpanElement;
+  sphereOpacitySlider?: HTMLInputElement;
+  sphereOpacityValue?: HTMLSpanElement;
+  latInput: HTMLInputElement;
+  lonInput: HTMLInputElement;
+  beltInput?: HTMLInputElement;
+  pulseInput?: HTMLInputElement;
+  sizeInput?: HTMLInputElement;
+    scriptInput?: HTMLInputElement;
+    scriptSelect?: HTMLSelectElement;
   };
 
   const objectControls = new Map<string, ObjectControls>();
@@ -124,6 +123,7 @@ export function createPropertiesTab(app: App): HTMLElement {
     form.className = 'properties-object-form';
 
     const isTwirlingAxis = simObject.type === 'twirling-axis';
+    const isRgp = simObject.type === 'rgpXY';
 
 
     const speedGroup = document.createElement('div');
@@ -153,27 +153,9 @@ export function createPropertiesTab(app: App): HTMLElement {
     });
     speedGroup.appendChild(speedLabel);
     speedGroup.appendChild(speedInput);
-
-    const directionGroup = document.createElement('fieldset');
-    directionGroup.className = 'properties-fieldset';
-    const directionLegend = document.createElement('legend');
-    directionLegend.textContent = 'Direction';
-    directionGroup.appendChild(directionLegend);
-    const directionGroupName = `properties-direction-${simObject.id}`;
-    const directionCW = createRadio(directionGroupName, 'cw', 'Clockwise');
-    const directionCCW = createRadio(directionGroupName, 'ccw', 'Counter Clockwise');
-    directionCW.input.addEventListener('change', () => {
-      if (directionCW.input.checked) {
-        applyUpdate({ direction: 1 });
-      }
-    });
-    directionCCW.input.addEventListener('change', () => {
-      if (directionCCW.input.checked) {
-        applyUpdate({ direction: -1 });
-      }
-    });
-    directionGroup.appendChild(directionCW.wrapper);
-    directionGroup.appendChild(directionCCW.wrapper);
+    if (isRgp) {
+      speedInput.disabled = true;
+    }
 
     let planeYG: ReturnType<typeof createRadio> | undefined;
     let planeGB: ReturnType<typeof createRadio> | undefined;
@@ -185,7 +167,7 @@ export function createPropertiesTab(app: App): HTMLElement {
     let shadingSlider: HTMLInputElement | undefined;
     let shadingValue: HTMLSpanElement | undefined;
 
-    if (!isTwirlingAxis) {
+    if (!isTwirlingAxis && !isRgp) {
       const planeGroup = document.createElement('fieldset');
       planeGroup.className = 'properties-fieldset';
       const planeLegend = document.createElement('legend');
@@ -270,12 +252,15 @@ export function createPropertiesTab(app: App): HTMLElement {
     }
 
     let sizeInput: HTMLInputElement | undefined;
+    let scriptInput: HTMLInputElement | undefined;
+    let scriptSelect: HTMLSelectElement | undefined;
+    let sphereOpacitySlider: HTMLInputElement | undefined;
+    let sphereOpacityValue: HTMLSpanElement | undefined;
 
-    if (isTwirlingAxis) {
-      const axisSim = simObject as SimObjectView & {
-        size?: number;
-        opacity?: number;
-      };
+    if (isTwirlingAxis || isRgp) {
+      const defaultScript = app.getDefaultTwirlingAxisScript();
+      const presets = app.getTwirlingAxisScriptPresets();
+      const defaultSphereOpacity = app.getDefaultRgpSphereOpacity();
 
       const sizeGroup = document.createElement('div');
       sizeGroup.className = 'properties-group';
@@ -289,7 +274,8 @@ export function createPropertiesTab(app: App): HTMLElement {
       sizeInput.min = '0.1';
       sizeInput.step = '0.1';
       sizeInput.className = 'properties-number properties-number--compact';
-      sizeInput.value = (axisSim.size ?? 1).toFixed(2);
+      const initialSize = (simObject as { size?: number }).size ?? 1;
+      sizeInput.value = initialSize.toFixed(2);
       sizeInput.dataset.prev = sizeInput.value;
       sizeInput.addEventListener('change', () => {
         if (!sizeInput) {
@@ -305,39 +291,166 @@ export function createPropertiesTab(app: App): HTMLElement {
       sizeGroup.appendChild(sizeLabel);
       sizeGroup.appendChild(sizeInput);
 
-      const axisOpacityGroup = document.createElement('div');
-      axisOpacityGroup.className = 'properties-group';
-      const axisOpacityLabel = document.createElement('label');
-      axisOpacityLabel.className = 'properties-label';
-      axisOpacityLabel.textContent = 'Axis Opacity';
-      axisOpacityLabel.htmlFor = `properties-axis-opacity-${simObject.id}`;
-      opacitySlider = document.createElement('input');
-      opacitySlider.type = 'range';
-      opacitySlider.id = `properties-axis-opacity-${simObject.id}`;
-      opacitySlider.min = '0';
-      opacitySlider.max = '1';
-      opacitySlider.step = '0.05';
-      opacitySlider.className = 'sim-speed-slider';
-      opacitySlider.value = (axisSim.opacity ?? 1).toFixed(2);
-      opacityValue = document.createElement('span');
-      opacityValue.className = 'properties-shading-value';
-      opacityValue.textContent = (axisSim.opacity ?? 1).toFixed(2);
-      opacitySlider.addEventListener('input', () => {
-        if (!opacitySlider || !opacityValue) {
-          return;
-        }
-        const value = Number.parseFloat(opacitySlider.value);
-        const clamped = Number.isFinite(value) ? Math.min(Math.max(value, 0), 1) : axisSim.opacity ?? 1;
-        opacitySlider.value = clamped.toFixed(2);
-        opacityValue.textContent = clamped.toFixed(2);
-        applyUpdate({ opacity: clamped } as ObjectUpdate);
-      });
-      axisOpacityGroup.appendChild(axisOpacityLabel);
-      axisOpacityGroup.appendChild(opacitySlider);
-      axisOpacityGroup.appendChild(opacityValue);
-
       form.appendChild(sizeGroup);
-      form.appendChild(axisOpacityGroup);
+
+      if (isRgp) {
+        const rgpSim = simObject as SimObjectView & { sphereOpacity?: number };
+        const sphereOpacityGroup = document.createElement('div');
+        sphereOpacityGroup.className = 'properties-group';
+        const sphereOpacityLabel = document.createElement('label');
+        sphereOpacityLabel.className = 'properties-label';
+        sphereOpacityLabel.textContent = 'Sphere Opacity';
+        sphereOpacityLabel.htmlFor = `properties-rgp-sphere-opacity-${simObject.id}`;
+        sphereOpacitySlider = document.createElement('input');
+        sphereOpacitySlider.type = 'range';
+        sphereOpacitySlider.id = `properties-rgp-sphere-opacity-${simObject.id}`;
+        sphereOpacitySlider.min = '0';
+        sphereOpacitySlider.max = '1';
+        sphereOpacitySlider.step = '0.05';
+        sphereOpacitySlider.className = 'sim-speed-slider';
+        const initialSphereOpacity = rgpSim.sphereOpacity ?? defaultSphereOpacity;
+        sphereOpacitySlider.value = initialSphereOpacity.toFixed(2);
+        sphereOpacityValue = document.createElement('span');
+        sphereOpacityValue.className = 'properties-shading-value';
+        sphereOpacityValue.textContent = initialSphereOpacity.toFixed(2);
+        sphereOpacitySlider.addEventListener('input', () => {
+          if (!sphereOpacitySlider || !sphereOpacityValue) {
+            return;
+          }
+          const value = Number.parseFloat(sphereOpacitySlider.value);
+          const clamped = Number.isFinite(value) ? Math.min(Math.max(value, 0), 1) : initialSphereOpacity;
+          sphereOpacitySlider.value = clamped.toFixed(2);
+          sphereOpacityValue.textContent = clamped.toFixed(2);
+          applyUpdate({ sphereOpacity: clamped } as ObjectUpdate);
+        });
+        sphereOpacityGroup.appendChild(sphereOpacityLabel);
+        sphereOpacityGroup.appendChild(sphereOpacitySlider);
+        sphereOpacityGroup.appendChild(sphereOpacityValue);
+        form.appendChild(sphereOpacityGroup);
+      }
+
+      if (isTwirlingAxis) {
+        const axisSim = simObject as SimObjectView & {
+          opacity?: number;
+          rotationScriptSource?: string;
+        };
+
+        const axisOpacityGroup = document.createElement('div');
+        axisOpacityGroup.className = 'properties-group';
+        const axisOpacityLabel = document.createElement('label');
+        axisOpacityLabel.className = 'properties-label';
+        axisOpacityLabel.textContent = 'Axis Opacity';
+        axisOpacityLabel.htmlFor = `properties-axis-opacity-${simObject.id}`;
+        opacitySlider = document.createElement('input');
+        opacitySlider.type = 'range';
+        opacitySlider.id = `properties-axis-opacity-${simObject.id}`;
+        opacitySlider.min = '0';
+        opacitySlider.max = '1';
+        opacitySlider.step = '0.05';
+        opacitySlider.className = 'sim-speed-slider';
+        opacitySlider.value = (axisSim.opacity ?? 1).toFixed(2);
+        opacityValue = document.createElement('span');
+        opacityValue.className = 'properties-shading-value';
+        opacityValue.textContent = (axisSim.opacity ?? 1).toFixed(2);
+        opacitySlider.addEventListener('input', () => {
+          if (!opacitySlider || !opacityValue) {
+            return;
+          }
+          const value = Number.parseFloat(opacitySlider.value);
+          const clamped = Number.isFinite(value) ? Math.min(Math.max(value, 0), 1) : axisSim.opacity ?? 1;
+          opacitySlider.value = clamped.toFixed(2);
+          opacityValue.textContent = clamped.toFixed(2);
+          applyUpdate({ opacity: clamped } as ObjectUpdate);
+        });
+        axisOpacityGroup.appendChild(axisOpacityLabel);
+        axisOpacityGroup.appendChild(opacitySlider);
+        axisOpacityGroup.appendChild(opacityValue);
+
+        const scriptGroup = document.createElement('div');
+        scriptGroup.className = 'properties-group';
+      const scriptSelectLabel = document.createElement('label');
+      scriptSelectLabel.className = 'properties-label';
+      scriptSelectLabel.textContent = 'Script Presets';
+      scriptSelectLabel.htmlFor = `properties-script-select-${simObject.id}`;
+      const presetSelect = document.createElement('select');
+      presetSelect.id = `properties-script-select-${simObject.id}`;
+      presetSelect.className = 'properties-select';
+      const customOption = document.createElement('option');
+      customOption.value = '';
+      customOption.textContent = 'Custom (edit below)';
+      presetSelect.appendChild(customOption);
+      presets.forEach((preset) => {
+        const option = document.createElement('option');
+        option.value = preset.script;
+        option.textContent = preset.label;
+        presetSelect.appendChild(option);
+      });
+      scriptSelect = presetSelect;
+      presetSelect.dataset.prev = '';
+      presetSelect.addEventListener('change', () => {
+        const selectedScript = presetSelect.value;
+        if (selectedScript) {
+          scriptInput!.value = selectedScript;
+          scriptInput!.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+        presetSelect.dataset.prev = presetSelect.value;
+      });
+
+      const scriptLabel = document.createElement('label');
+        scriptLabel.className = 'properties-label';
+        scriptLabel.textContent = 'Rotation Script';
+        scriptLabel.htmlFor = `properties-script-${simObject.id}`;
+        scriptInput = document.createElement('input');
+        scriptInput.type = 'text';
+        scriptInput.id = `properties-script-${simObject.id}`;
+        scriptInput.className = 'properties-input';
+        scriptInput.value = axisSim.rotationScriptSource ?? defaultScript;
+        scriptInput.dataset.prev = scriptInput.value;
+      scriptInput.addEventListener('change', () => {
+        const value = scriptInput!.value.trim();
+        app.selectSimObject(simObject.id);
+        const applied = app.setSelectedTwirlingAxisRotationScript(value);
+        if (!applied) {
+          scriptInput!.value = scriptInput!.dataset.prev ?? defaultScript;
+          if (scriptSelect) {
+            scriptSelect.value = scriptSelect.dataset.prev ?? '';
+          }
+        } else {
+          scriptInput!.dataset.prev = scriptInput!.value;
+          if (scriptSelect) {
+            const matchingPreset = presets.find((preset) => preset.script === scriptInput!.value);
+            scriptSelect.value = matchingPreset ? matchingPreset.script : '';
+            scriptSelect.dataset.prev = scriptSelect.value;
+          }
+        }
+      });
+        scriptGroup.appendChild(scriptSelectLabel);
+      scriptGroup.appendChild(presetSelect);
+        scriptGroup.appendChild(scriptLabel);
+        scriptGroup.appendChild(scriptInput);
+
+        form.appendChild(scriptGroup);
+        form.appendChild(axisOpacityGroup);
+
+        const normalizedScript = axisSim.rotationScriptSource ?? defaultScript;
+        scriptInput.value = normalizedScript;
+        scriptInput.dataset.prev = normalizedScript;
+        const matchingPreset = presets.find((preset) => preset.script === normalizedScript);
+        scriptSelect.value = matchingPreset ? matchingPreset.script : '';
+        scriptSelect.dataset.prev = scriptSelect.value;
+      }
+
+      if (isRgp) {
+        const dexelButton = document.createElement('button');
+        dexelButton.type = 'button';
+        dexelButton.textContent = 'Spawn Dexel';
+        dexelButton.className = 'properties-button';
+        dexelButton.addEventListener('click', () => {
+          app.selectSimObject(simObject.id);
+          app.spawnDexelForSelectedRgp();
+        });
+        form.appendChild(dexelButton);
+      }
     }
 
     let beltInput: HTMLInputElement | undefined;
@@ -392,7 +505,7 @@ export function createPropertiesTab(app: App): HTMLElement {
       form.appendChild(pulseGroup);
     }
 
-    if (!isTwirlingAxis) {
+    if (!isTwirlingAxis && !isRgp) {
       const opacityGroup = document.createElement('div');
       opacityGroup.className = 'properties-group';
       const opacityLabel = document.createElement('label');
@@ -518,7 +631,6 @@ export function createPropertiesTab(app: App): HTMLElement {
     });
 
     form.appendChild(speedGroup);
-    form.appendChild(directionGroup);
     form.appendChild(segmentsGroup);
     details.appendChild(form);
 
@@ -537,8 +649,6 @@ export function createPropertiesTab(app: App): HTMLElement {
       summaryLabel,
       visibilityCheckbox,
       speedInput,
-      directionCW: directionCW.input,
-      directionCCW: directionCCW.input,
       planeYG: planeYG?.input,
       planeGB: planeGB?.input,
       planeYB: planeYB?.input,
@@ -553,6 +663,10 @@ export function createPropertiesTab(app: App): HTMLElement {
       beltInput,
       pulseInput,
       sizeInput,
+      scriptInput,
+      scriptSelect,
+      sphereOpacitySlider,
+      sphereOpacityValue,
     };
   };
 
@@ -573,35 +687,46 @@ export function createPropertiesTab(app: App): HTMLElement {
 
     controls.speedInput.value = simObject.speedPerTick.toFixed(2);
     controls.speedInput.dataset.prev = controls.speedInput.value;
+    controls.speedInput.disabled = simObject.type === 'rgpXY';
 
-    controls.directionCW.checked = simObject.direction >= 0;
-    controls.directionCCW.checked = simObject.direction < 0;
-
-    if (controls.planeYG && controls.planeGB && controls.planeYB && simObject.type !== 'twirling-axis') {
+    if (
+      controls.planeYG &&
+      controls.planeGB &&
+      controls.planeYB &&
+      (simObject.type === 'sphere' || simObject.type === 'twirl')
+    ) {
       controls.planeYG.checked = simObject.plane === 'YG';
       controls.planeGB.checked = simObject.plane === 'GB';
       controls.planeYB.checked = simObject.plane === 'YB';
     }
 
-    if (controls.shellInput && simObject.type !== 'twirling-axis') {
+    if (controls.shellInput && (simObject.type === 'sphere' || simObject.type === 'twirl')) {
       controls.shellInput.value = String(simObject.shellSize);
       controls.shellInput.dataset.prev = controls.shellInput.value;
     }
 
-    if (controls.baseColorSelect && simObject.type !== 'twirling-axis') {
+    if (controls.baseColorSelect && (simObject.type === 'sphere' || simObject.type === 'twirl')) {
       controls.baseColorSelect.value = simObject.baseColor;
     }
 
-    if (controls.shadingSlider && controls.shadingValue && simObject.type !== 'twirling-axis') {
+    if (
+      controls.shadingSlider &&
+      controls.shadingValue &&
+      (simObject.type === 'sphere' || simObject.type === 'twirl')
+    ) {
       const shading = simObject.shadingIntensity ?? app.getShadingIntensity();
       controls.shadingSlider.value = shading.toString();
       controls.shadingValue.textContent = shading.toFixed(2);
     }
 
     if (controls.opacitySlider && controls.opacityValue) {
-      const opacity = simObject.type === 'twirling-axis' ? simObject.opacity : simObject.opacity;
-      controls.opacitySlider.value = opacity.toFixed(2);
-      controls.opacityValue.textContent = opacity.toFixed(2);
+      if (simObject.type === 'twirling-axis') {
+        controls.opacitySlider.value = simObject.opacity.toFixed(2);
+        controls.opacityValue.textContent = simObject.opacity.toFixed(2);
+      } else if (simObject.type === 'sphere' || simObject.type === 'twirl') {
+        controls.opacitySlider.value = simObject.opacity.toFixed(2);
+        controls.opacityValue.textContent = simObject.opacity.toFixed(2);
+      }
     }
 
     if (controls.beltInput) {
@@ -615,9 +740,47 @@ export function createPropertiesTab(app: App): HTMLElement {
     }
 
     if (controls.sizeInput) {
-      const value = simObject.type === 'twirling-axis' ? simObject.size : 1;
+      const value = simObject.type === 'twirling-axis' || simObject.type === 'rgpXY' ? simObject.size : 1;
       controls.sizeInput.value = value.toFixed(2);
       controls.sizeInput.dataset.prev = controls.sizeInput.value;
+    }
+
+    if (controls.sphereOpacitySlider && controls.sphereOpacityValue) {
+      if (simObject.type === 'rgpXY') {
+        controls.sphereOpacitySlider.value = simObject.sphereOpacity.toFixed(2);
+        controls.sphereOpacitySlider.dataset.prev = controls.sphereOpacitySlider.value;
+        controls.sphereOpacityValue.textContent = simObject.sphereOpacity.toFixed(2);
+        controls.sphereOpacitySlider.disabled = false;
+      } else {
+        const defaultSphereOpacity = app.getDefaultRgpSphereOpacity();
+        controls.sphereOpacitySlider.value = defaultSphereOpacity.toFixed(2);
+        controls.sphereOpacitySlider.dataset.prev = controls.sphereOpacitySlider.value;
+        controls.sphereOpacityValue.textContent = defaultSphereOpacity.toFixed(2);
+        controls.sphereOpacitySlider.disabled = true;
+      }
+    }
+
+    if (controls.scriptInput) {
+      if (simObject.type === 'twirling-axis') {
+        controls.scriptInput.value = simObject.rotationScriptSource;
+        controls.scriptInput.dataset.prev = controls.scriptInput.value;
+      } else {
+        const defaultScript = app.getDefaultTwirlingAxisScript();
+        controls.scriptInput.value = defaultScript;
+        controls.scriptInput.dataset.prev = defaultScript;
+      }
+    }
+
+    if (controls.scriptSelect) {
+      if (simObject.type === 'twirling-axis') {
+        const presets = app.getTwirlingAxisScriptPresets();
+        const match = presets.find((preset) => preset.script === simObject.rotationScriptSource);
+        controls.scriptSelect.value = match ? match.script : '';
+        controls.scriptSelect.dataset.prev = controls.scriptSelect.value;
+      } else {
+        controls.scriptSelect.value = '';
+        controls.scriptSelect.dataset.prev = '';
+      }
     }
 
     controls.latInput.value = String(segments.lat);

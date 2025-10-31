@@ -55,9 +55,18 @@ export interface TwirlingAxisObjectDefinition {
   initialRotationY?: number;
   initialRotationZ?: number;
   opacity?: number;
+  rotationScript?: string;
+}
+
+export interface RgpXYObjectDefinition {
+  type: 'rgpXY';
+  id: string;
+  size: number;
+  visible?: boolean;
 }
 
 export type SimObjectDefinition =
   | SphereObjectDefinition
   | TwirlObjectDefinition
-  | TwirlingAxisObjectDefinition;
+  | TwirlingAxisObjectDefinition
+  | RgpXYObjectDefinition;
