@@ -1100,8 +1100,8 @@ export class App {
         }
         const { modelMatrix } = this.computeTwirlingAxisMatrices(axisObject);
         const sizeScale = Math.max(0.01, axisObject.size);
-        const ballRadius = TWIRLING_AXIS_BASE_RADIUS * TWIRLING_AXIS_BALL_SCALE * sizeScale;
-        const ghostOpacity = clamp(axisObject.opacity * 0.6, 0.05, 1);
+        const ballRadius = TWIRLING_AXIS_BASE_RADIUS * TWIRLING_AXIS_BALL_SCALE * sizeScale * 0.5;
+        const ghostOpacity = clamp(axisObject.opacity * 0.7, 0.05, 1);
 
         const xTip = this.transformPoint(modelMatrix, [halfLength, 0, 0]);
         const yTip = this.transformPoint(modelMatrix, [0, halfLength, 0]);
@@ -1131,7 +1131,7 @@ export class App {
     }
 
     const mesh = this.ensureSphereMesh();
-    const planeVector = new Float32Array([0, 1, 0]);
+    const planeVector = new Float32Array([0, 0, 0]);
 
     gl.enable(gl.BLEND);
     gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
@@ -1143,7 +1143,7 @@ export class App {
       Assets.drawSphere(gl, sphereProgram, mesh, {
         modelMatrix,
         normalMatrix: this.identityNormalMatrix,
-        shadingIntensity: 0.1,
+        shadingIntensity: 0,
         planeVector,
         baseColor,
         vertexColorWeight: 0,
