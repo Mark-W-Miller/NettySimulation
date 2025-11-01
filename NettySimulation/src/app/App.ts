@@ -2009,9 +2009,12 @@ export class App {
       const newTwirl = Assets.createTwirlMesh(this.gl, Math.max(32, clampedLon * 4), clampedLon);
       this.twirlMesh = newTwirl;
       for (const simObject of this.simObjects) {
-        if (simObject.type === 'twirl') {
+        if (simObject.type === 'twirl' || simObject.type === 'rgpXY' || simObject.type === 'dexel') {
           simObject.mesh = newTwirl;
         }
+      }
+      for (const dexel of this.dexels) {
+        dexel.mesh = newTwirl;
       }
       if (oldTwirl) {
         Assets.disposeTwirlMesh(this.gl, oldTwirl);
