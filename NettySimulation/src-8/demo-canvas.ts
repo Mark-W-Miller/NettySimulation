@@ -8,16 +8,14 @@ canvas.height = 640;
 document.body.appendChild(canvas);
 const ctx = canvas.getContext('2d');
 
-const figure8 = new K1P2Figure8(100, 10, 0, 1);
-let hue = 0;
+const figure8 = new K1P2Figure8(100, 10, 0, 2, 0.5);
 
 function draw() {
     if (ctx) {
-        ctx.fillStyle = 'rgba(255, 255, 255, 0.1)';
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = 'rgba(28, 99, 241, 1)';
 
         const points = figure8.nextBeat();
-        ctx.strokeStyle = `hsl(${hue}, 100%, 50%)`;
+        ctx.strokeStyle = `100%, 100%, 50%)`;
         ctx.lineWidth = 2;
         ctx.beginPath();
         points.forEach((point, index) => {
@@ -31,7 +29,6 @@ function draw() {
         });
         ctx.stroke();
 
-        hue = (hue + 1) % 360;
         figure8.rotateCW(0.01);
     }
 }

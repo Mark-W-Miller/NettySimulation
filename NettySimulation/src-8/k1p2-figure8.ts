@@ -1,13 +1,20 @@
 // src/k1p2-figure8.ts
 
-export function k1p2Figure8Chunk(cycleTicStart: number, ticsPerBeat: number, cycleTics: number, R: number, a: number = 1): { x: number, y: number }[] {
+export function k1p2Figure8Chunk(
+    cycleTicStart: number,
+    ticsPerBeat: number,
+    cycleTics: number,
+    R: number,
+    scaleX: number = 1,
+    scaleY: number = 0.5,
+): { x: number, y: number }[] {
     const points = [];
     const cosR = Math.cos(R);
     const sinR = Math.sin(R);
     for (let i = 0; i < ticsPerBeat; i++) {
         const t = 2 * Math.PI * ((cycleTicStart + i) % cycleTics) / cycleTics;
-        let x = a * Math.cos(t);
-        let y = (a / 2) * Math.sin(2 * t);
+        const x = scaleX * Math.cos(t);
+        const y = scaleY * Math.sin(2 * t);
         // Apply CW rotation
         const xRot = x * cosR + y * sinR;
         const yRot = -x * sinR + y * cosR;
@@ -24,7 +31,8 @@ export class K1P2Figure8 {
         private readonly cycleTics: number,
         private readonly ticsPerBeat: number,
         cycleTicStart: number = 0,
-        private readonly a: number = 1,
+        private scaleX: number = 1,
+        private scaleY: number = 0.5,
         initialRotation: number = 0,
     ) {
         this.cycleTicStart = ((cycleTicStart % cycleTics) + cycleTics) % cycleTics;
@@ -32,13 +40,29 @@ export class K1P2Figure8 {
     }
 
     nextBeat(): { x: number, y: number }[] {
-        const points = k1p2Figure8Chunk(this.cycleTicStart, this.ticsPerBeat, this.cycleTics, this.rotation, this.a);
+        const points = k1p2Figure8Chunk(
+            this.cycleTicStart,
+            this.ticsPerBeat,
+            this.cycleTics,
+            this.rotation,
+            this.scaleX,
+            this.scaleY,
+        );
         this.cycleTicStart = (this.cycleTicStart + this.ticsPerBeat) % this.cycleTics;
         return points;
     }
 
     rotateCW(delta: number): void {
         this.rotation += delta;
+    }
+
+    setScale(scaleX: number, scaleY?: number): void {
+        this.scaleX = scaleX;
+        this.scaleY = scaleY ?? this.scaleY;
+    }
+
+    getScale(): { scaleX: number; scaleY: number } {
+        return { scaleX: this.scaleX, scaleY: this.scaleY };
     }
 
     getRotation(): number {

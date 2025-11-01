@@ -10,6 +10,8 @@ import {
   type TwirlMesh,
   type TwirlProgram,
   type TwirlingAxisMesh,
+  type Twirl8Mesh,
+  type Twirl8Program,
 } from '../engine/Assets';
 import { AXIS_COLORS } from '../engine/assets/axisAsset';
 import {
@@ -24,6 +26,7 @@ import {
   type TwirlingAxisObjectDefinition,
   type RgpXYObjectDefinition,
   type DexelObjectDefinition,
+  type Twirl8ObjectDefinition,
   type SimObjectDefinition,
 } from '../engine/assets/simTypes';
 import { CameraController } from './camera';
@@ -221,7 +224,17 @@ interface Dexel {
   sourceId: string;
 }
 
-type SimObject = SphereObject | TwirlObject | TwirlingAxisObject | RgpXYObject | DexelObject;
+interface Twirl8Object {
+  type: 'twirl8';
+  id: string;
+  axis: 'x' | 'y' | 'z';
+  radius: number;
+  color: BaseColor;
+  opacity: number;
+  visible: boolean;
+}
+
+type SimObject = SphereObject | TwirlObject | TwirlingAxisObject | RgpXYObject | DexelObject | Twirl8Object;
 
 interface GhostParticle {
   position: Float32Array;
@@ -260,6 +273,8 @@ export class App {
   private sphereMesh: SphereMesh | null = null;
   private twirlMesh: TwirlMesh | null = null;
   private twirlingAxisMesh: TwirlingAxisMesh | null = null;
+  private twirl8Program: Twirl8Program | null = null;
+  private twirl8Mesh: Twirl8Mesh | null = null;
   private axes: AxisSet | null = null;
   private rotatedAxes: AxisSet | null = null;
   private axisVisibility: Record<'x' | 'y' | 'z', boolean> = { x: true, y: true, z: true };
@@ -372,6 +387,13 @@ export class App {
         },
       ],
     },
+    {
+      id: 'RGP_Pray',
+      name: 'RGP_Pray',
+      objects: [
+        { type: 'twirl8', id: 'twirl-8-y', axis: 'y', radius: 24, color: 'white' },
+      ],
+    },
   ];
   private selectedSegmentId: string | null = null;
   private readonly simListeners = new Set<() => void>();
@@ -381,6 +403,24 @@ export class App {
     const rotateX = mat4FromXRotation(Math.PI / 4);
     this.rotatedAxisModelMatrix = mat4Multiply(rotateX, rotateY);
     this.rotatedAxisNormalMatrix = mat3FromMat4(this.rotatedAxisModelMatrix);
+  }
+
+  private buildTwirl8ModelMatrix(axis: 'x' | 'y' | 'z', radius: number): Float32Array {
+    const norm = Math.max(0.01, radius / this.defaultShellSize);
+    let rotation = this.identityModelMatrix;
+    switch (axis) {
+      case 'x':
+        rotation = mat4FromYRotation(-Math.PI / 2);
+        break;
+      case 'y':
+        rotation = mat4FromXRotation(Math.PI / 2);
+        break;
+      case 'z':
+        rotation = this.identityModelMatrix;
+        break;
+    }
+    const scale = mat4Scale(norm, norm, norm);
+    return mat4Multiply(rotation, scale);
   }
 
   mount(host: HTMLElement): void {
@@ -403,7 +443,9 @@ export class App {
     const sphereProgram = Assets.createSphereProgram(gl);
     const axisProgram = Assets.createAxisProgram(gl);
     const twirlProgram = Assets.createTwirlProgram(gl);
+    const twirl8Program = Assets.createTwirl8Program(gl);
     const sphere = Assets.createSphereMesh(gl, this.sphereSegments.lat, this.sphereSegments.lon);
+    const twirl8 = Assets.createTwirl8Mesh(gl, 256);
     const twirl = Assets.createTwirlMesh(
       gl,
       Math.max(32, this.sphereSegments.lon * 4),
@@ -423,7 +465,9 @@ export class App {
     this.sphereProgram = sphereProgram;
     this.axisProgram = axisProgram;
     this.twirlProgram = twirlProgram;
+    this.twirl8Program = twirl8Program;
     this.sphereMesh = sphere;
+    this.twirl8Mesh = twirl8;
     this.twirlMesh = twirl;
     this.axes = axes;
     this.rotatedAxes = rotatedAxes;
@@ -489,6 +533,10 @@ export class App {
       Assets.disposeTwirlingAxisMesh(this.gl, this.twirlingAxisMesh);
     }
 
+    if (this.gl && this.twirl8Mesh) {
+      Assets.disposeTwirl8Mesh(this.gl, this.twirl8Mesh);
+    }
+
     if (this.gl && this.axes) {
       Assets.disposeAxisSet(this.gl, this.axes);
     }
@@ -509,13 +557,19 @@ export class App {
       Assets.disposeTwirlProgram(this.gl, this.twirlProgram);
     }
 
+    if (this.gl && this.twirl8Program) {
+      Assets.disposeTwirl8Program(this.gl, this.twirl8Program);
+    }
+
     this.canvas = null;
     this.gl = null;
     this.sphereProgram = null;
     this.axisProgram = null;
     this.twirlProgram = null;
+    this.twirl8Program = null;
     this.sphereMesh = null;
     this.twirlMesh = null;
+    this.twirl8Mesh = null;
     this.twirlingAxisMesh = null;
     this.axes = null;
     this.rotatedAxes = null;
@@ -602,6 +656,7 @@ export class App {
     const twirlingAxisQueue: TwirlingAxisObject[] = [];
     const rgpQueue: RgpXYObject[] = [];
     const dexelQueue: DexelObject[] = [];
+    const twirl8Queue: Twirl8Object[] = [];
 
     for (const simObject of this.simObjects) {
       if (!simObject.visible) {
@@ -618,6 +673,11 @@ export class App {
 
       if (simObject.type === 'dexel') {
         dexelQueue.push(simObject);
+        continue;
+      }
+
+      if (simObject.type === 'twirl8') {
+        twirl8Queue.push(simObject);
         continue;
       }
 
@@ -737,6 +797,29 @@ export class App {
     }
 
     this.drawGhostParticles(gl, sphereProgram);
+
+    if (twirl8Queue.length > 0 && this.twirl8Program && this.twirl8Mesh) {
+      Assets.useTwirl8Program(gl, this.twirl8Program);
+      Assets.setTwirl8SharedUniforms(gl, this.twirl8Program, {
+        viewMatrix: this.viewMatrix,
+        projectionMatrix: this.projectionMatrix,
+      });
+      gl.enable(gl.BLEND);
+      gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+
+      for (const ring of twirl8Queue) {
+        const modelMatrix = this.buildTwirl8ModelMatrix(ring.axis, ring.radius);
+        const colorVec = this.getBaseColorVector(ring.color, ring.opacity);
+        Assets.drawTwirl8(gl, this.twirl8Program, this.twirl8Mesh, {
+          modelMatrix,
+          color: colorVec,
+        });
+      }
+
+      gl.disable(gl.BLEND);
+      Assets.useSphereProgram(gl, sphereProgram);
+      Assets.setSphereSharedUniforms(gl, sphereProgram, sharedUniforms);
+    }
 
     if (twirlingAxisQueue.length > 0) {
       Assets.useAxisProgram(gl, axisProgram);
@@ -910,6 +993,17 @@ export class App {
         this.syncDexelRingSpeeds(dexelObject);
         this.simObjects.push(dexelObject);
         this.updateDexelAssetPosition(dexelObject);
+      } else if (objectDef.type === 'twirl8') {
+        const def = objectDef as Twirl8ObjectDefinition;
+        this.simObjects.push({
+          type: 'twirl8',
+          id: def.id,
+          axis: def.axis,
+          radius: Math.max(0.01, def.radius),
+          color: def.color,
+          opacity: clamp(def.opacity ?? 1, 0, 1),
+          visible: def.visible ?? true,
+        });
       } else if (objectDef.type === 'twirling-axis') {
         const mesh = this.ensureTwirlingAxisMesh();
         const scriptSource = objectDef.rotationScript ?? DEFAULT_TWIRLING_AXIS_SCRIPT;
@@ -1125,23 +1219,37 @@ export class App {
     }
 
     if (typeof update.speedPerTick === 'number' && Number.isFinite(update.speedPerTick)) {
-      if (selected.type !== 'rgpXY') {
-        const nextSpeed = Math.max(0.1, update.speedPerTick);
-        selected.speedPerTick = nextSpeed;
-        if (selected.type === 'dexel') {
+      const nextSpeed = Math.max(0.1, update.speedPerTick);
+      switch (selected.type) {
+        case 'sphere':
+        case 'twirl':
+        case 'twirling-axis':
+          selected.speedPerTick = nextSpeed;
+          break;
+        case 'dexel':
+          selected.speedPerTick = nextSpeed;
           this.syncDexelRingSpeeds(selected);
-        }
+          break;
+        default:
+          break;
       }
     }
 
     if (update.direction !== undefined) {
-      if (selected.type !== 'rgpXY') {
-        const nextDirection = update.direction >= 0 ? 1 : -1;
-        selected.direction = nextDirection;
-        if (selected.type === 'dexel') {
+      const nextDirection = update.direction >= 0 ? 1 : -1;
+      switch (selected.type) {
+        case 'sphere':
+        case 'twirl':
+        case 'twirling-axis':
+          selected.direction = nextDirection;
+          break;
+        case 'dexel':
+          selected.direction = nextDirection;
           selected.primary.direction = nextDirection;
           selected.secondary.direction = nextDirection;
-        }
+          break;
+        default:
+          break;
       }
     }
 
@@ -1154,10 +1262,15 @@ export class App {
 
     if (typeof update.opacity === 'number' && Number.isFinite(update.opacity)) {
       const clampedOpacity = clamp(update.opacity, 0, 1);
-      if (selected.type === 'twirling-axis') {
-        selected.opacity = clampedOpacity;
-      } else if (selected.type === 'sphere' || selected.type === 'twirl') {
-        selected.opacity = clampedOpacity;
+      switch (selected.type) {
+        case 'twirling-axis':
+        case 'sphere':
+        case 'twirl':
+        case 'twirl8':
+          selected.opacity = clampedOpacity;
+          break;
+        default:
+          break;
       }
     }
 
@@ -1192,6 +1305,8 @@ export class App {
       if (sizeChanged) {
         this.updateDexelAssetPosition(selected);
       }
+    } else if (selected.type === 'twirl8') {
+      // Twirl8 currently has no additional editable properties beyond opacity/visibility.
     } else {
       if (update.plane) {
         selected.plane = update.plane;

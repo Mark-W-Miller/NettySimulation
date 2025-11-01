@@ -32,6 +32,15 @@ import {
   disposeTwirlingAxisMesh,
   drawTwirlingAxis,
 } from './assets/twirlingAxisAsset';
+import {
+  createTwirl8Mesh,
+  disposeTwirl8Mesh,
+  createTwirl8Program,
+  disposeTwirl8Program,
+  useTwirl8Program,
+  setTwirl8SharedUniforms,
+  drawTwirl8,
+} from './assets/twirl8Asset';
 
 export const Assets = {
   createAxisSet,
@@ -58,6 +67,13 @@ export const Assets = {
   createTwirlingAxisMesh,
   disposeTwirlingAxisMesh,
   drawTwirlingAxis,
+  createTwirl8Mesh,
+  disposeTwirl8Mesh,
+  createTwirl8Program,
+  disposeTwirl8Program,
+  useTwirl8Program,
+  setTwirl8SharedUniforms,
+  drawTwirl8,
 };
 
 export type {
@@ -81,3 +97,4 @@ export type {
   TwirlDrawParams,
 } from './assets/twirlAsset';
 export type { TwirlingAxisMesh } from './assets/twirlingAxisAsset';
+export type { Twirl8Mesh, Twirl8Program, Twirl8SharedUniforms } from './assets/twirl8Asset';

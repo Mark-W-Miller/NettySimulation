@@ -65,6 +65,16 @@ export interface RgpXYObjectDefinition {
   visible?: boolean;
 }
 
+export interface Twirl8ObjectDefinition {
+  type: 'twirl8';
+  id: string;
+  axis: 'x' | 'y' | 'z';
+  radius: number;
+  color: BaseColor;
+  opacity?: number;
+  visible?: boolean;
+}
+
 export interface DexelObjectDefinition {
   type: 'dexel';
   id: string;
@@ -84,4 +94,5 @@ export type SimObjectDefinition =
   | TwirlObjectDefinition
   | TwirlingAxisObjectDefinition
   | RgpXYObjectDefinition
+  | Twirl8ObjectDefinition
   | DexelObjectDefinition;

@@ -42,7 +42,7 @@ export function createPropertiesTab(app: App): HTMLElement {
     summary: HTMLElement;
     summaryLabel: HTMLSpanElement;
     visibilityCheckbox: HTMLInputElement;
-    speedInput: HTMLInputElement;
+    speedInput?: HTMLInputElement;
     planeYG?: HTMLInputElement;
     planeGB?: HTMLInputElement;
     planeYB?: HTMLInputElement;
@@ -50,23 +50,23 @@ export function createPropertiesTab(app: App): HTMLElement {
     baseColorSelect?: HTMLSelectElement;
     shadingSlider?: HTMLInputElement;
     shadingValue?: HTMLSpanElement;
-  opacitySlider?: HTMLInputElement;
-  opacityValue?: HTMLSpanElement;
-  sphereOpacitySlider?: HTMLInputElement;
-  sphereOpacityValue?: HTMLSpanElement;
-  primaryShadingSlider?: HTMLInputElement;
-  primaryShadingValue?: HTMLSpanElement;
-  primaryOpacitySlider?: HTMLInputElement;
-  primaryOpacityValue?: HTMLSpanElement;
-  secondaryShadingSlider?: HTMLInputElement;
-  secondaryShadingValue?: HTMLSpanElement;
-  secondaryOpacitySlider?: HTMLInputElement;
-  secondaryOpacityValue?: HTMLSpanElement;
-  latInput: HTMLInputElement;
-  lonInput: HTMLInputElement;
-  beltInput?: HTMLInputElement;
-  pulseInput?: HTMLInputElement;
-  sizeInput?: HTMLInputElement;
+    opacitySlider?: HTMLInputElement;
+    opacityValue?: HTMLSpanElement;
+    sphereOpacitySlider?: HTMLInputElement;
+    sphereOpacityValue?: HTMLSpanElement;
+    primaryShadingSlider?: HTMLInputElement;
+    primaryShadingValue?: HTMLSpanElement;
+    primaryOpacitySlider?: HTMLInputElement;
+    primaryOpacityValue?: HTMLSpanElement;
+    secondaryShadingSlider?: HTMLInputElement;
+    secondaryShadingValue?: HTMLSpanElement;
+    secondaryOpacitySlider?: HTMLInputElement;
+    secondaryOpacityValue?: HTMLSpanElement;
+    latInput?: HTMLInputElement;
+    lonInput?: HTMLInputElement;
+    beltInput?: HTMLInputElement;
+    pulseInput?: HTMLInputElement;
+    sizeInput?: HTMLInputElement;
     scriptInput?: HTMLInputElement;
     scriptSelect?: HTMLSelectElement;
   };
@@ -133,37 +133,45 @@ export function createPropertiesTab(app: App): HTMLElement {
     const isTwirlingAxis = simObject.type === 'twirling-axis';
     const isRgp = simObject.type === 'rgpXY';
     const isDexel = simObject.type === 'dexel';
+    const supportsSpeed = typeof (simObject as { speedPerTick?: number }).speedPerTick === 'number';
 
-
-    const speedGroup = document.createElement('div');
-    speedGroup.className = 'properties-group';
-    const speedLabel = document.createElement('label');
-    speedLabel.className = 'properties-label';
-    speedLabel.textContent = 'Speed per Tick';
-    speedLabel.htmlFor = `properties-speed-${simObject.id}`;
-    const speedInput = document.createElement('input');
-    speedInput.type = 'number';
-    speedInput.id = `properties-speed-${simObject.id}`;
-    speedInput.min = '0.1';
-    speedInput.step = '0.1';
-    speedInput.className = 'properties-number';
-    speedInput.value = simObject.speedPerTick.toFixed(2);
-    speedInput.dataset.prev = speedInput.value;
-    speedInput.addEventListener('change', () => {
-      const value = Number.parseFloat(speedInput.value);
-      if (!Number.isFinite(value)) {
-        speedInput.value = speedInput.dataset.prev ?? '1.0';
-        return;
-      }
-      const next = Math.max(0.1, value);
-      speedInput.value = next.toFixed(2);
+    let speedGroup: HTMLDivElement | undefined;
+    let speedInput: HTMLInputElement | undefined;
+    if (supportsSpeed) {
+      speedGroup = document.createElement('div');
+      speedGroup.className = 'properties-group';
+      const speedLabel = document.createElement('label');
+      speedLabel.className = 'properties-label';
+      speedLabel.textContent = 'Speed per Tick';
+      speedLabel.htmlFor = `properties-speed-${simObject.id}`;
+      speedInput = document.createElement('input');
+      speedInput.type = 'number';
+      speedInput.id = `properties-speed-${simObject.id}`;
+      speedInput.min = '0.1';
+      speedInput.step = '0.1';
+      speedInput.className = 'properties-number';
+      const initialSpeed = (simObject as { speedPerTick: number }).speedPerTick;
+      speedInput.value = initialSpeed.toFixed(2);
       speedInput.dataset.prev = speedInput.value;
-      applyUpdate({ speedPerTick: next });
-    });
-    speedGroup.appendChild(speedLabel);
-    speedGroup.appendChild(speedInput);
-    if (isRgp) {
-      speedInput.disabled = true;
+      speedInput.addEventListener('change', () => {
+        if (!speedInput) {
+          return;
+        }
+        const value = Number.parseFloat(speedInput.value);
+        if (!Number.isFinite(value)) {
+          speedInput.value = speedInput.dataset.prev ?? '1.0';
+          return;
+        }
+        const next = Math.max(0.1, value);
+        speedInput.value = next.toFixed(2);
+        speedInput.dataset.prev = speedInput.value;
+        applyUpdate({ speedPerTick: next });
+      });
+      speedGroup.appendChild(speedLabel);
+      speedGroup.appendChild(speedInput);
+      if (isRgp) {
+        speedInput.disabled = true;
+      }
     }
 
     let planeYG: ReturnType<typeof createRadio> | undefined;
@@ -176,7 +184,7 @@ export function createPropertiesTab(app: App): HTMLElement {
     let shadingSlider: HTMLInputElement | undefined;
     let shadingValue: HTMLSpanElement | undefined;
 
-    if (!isTwirlingAxis && !isRgp && !isDexel) {
+    if (simObject.type === 'sphere' || simObject.type === 'twirl') {
       const planeGroup = document.createElement('fieldset');
       planeGroup.className = 'properties-fieldset';
       const planeLegend = document.createElement('legend');
@@ -723,103 +731,123 @@ export function createPropertiesTab(app: App): HTMLElement {
       opacityGroup.appendChild(opacityLabel);
       opacityGroup.appendChild(opacitySlider);
       opacityGroup.appendChild(opacityValue);
-
-      const shadingGroup = document.createElement('div');
-      shadingGroup.className = 'properties-group';
-      const shadingLabel = document.createElement('label');
-      shadingLabel.className = 'properties-label';
-      shadingLabel.textContent = 'Shading Intensity';
-      shadingLabel.htmlFor = `properties-shading-${simObject.id}`;
-      shadingSlider = document.createElement('input');
-      shadingSlider.type = 'range';
-      shadingSlider.id = `properties-shading-${simObject.id}`;
-      shadingSlider.min = '0';
-      shadingSlider.max = '1';
-      shadingSlider.step = '0.05';
-      shadingSlider.className = 'sim-speed-slider';
-      shadingValue = document.createElement('span');
-      shadingValue.className = 'properties-shading-value';
-      const initialShading = simObject.shadingIntensity ?? app.getShadingIntensity();
-      shadingSlider.value = initialShading.toString();
-      shadingValue.textContent = initialShading.toFixed(2);
-      shadingSlider.addEventListener('input', () => {
-        if (!shadingSlider || !shadingValue) {
-          return;
-        }
-        const value = Number.parseFloat(shadingSlider.value);
-        const fallback = simObject.shadingIntensity ?? app.getShadingIntensity();
-        const clamped = Number.isFinite(value) ? Math.min(Math.max(value, 0), 1) : fallback;
-        shadingSlider.value = clamped.toString();
-        shadingValue.textContent = clamped.toFixed(2);
-        app.selectSimObject(simObject.id);
-        app.setShadingIntensity(clamped);
-      });
-      shadingGroup.appendChild(shadingLabel);
-      shadingGroup.appendChild(shadingSlider);
-      shadingGroup.appendChild(shadingValue);
-
       form.appendChild(opacityGroup);
-      form.appendChild(shadingGroup);
+
+      if (simObject.type === 'sphere' || simObject.type === 'twirl') {
+        const shadingGroup = document.createElement('div');
+        shadingGroup.className = 'properties-group';
+        const shadingLabel = document.createElement('label');
+        shadingLabel.className = 'properties-label';
+        shadingLabel.textContent = 'Shading Intensity';
+        shadingLabel.htmlFor = `properties-shading-${simObject.id}`;
+        shadingSlider = document.createElement('input');
+        shadingSlider.type = 'range';
+        shadingSlider.id = `properties-shading-${simObject.id}`;
+        shadingSlider.min = '0';
+        shadingSlider.max = '1';
+        shadingSlider.step = '0.05';
+        shadingSlider.className = 'sim-speed-slider';
+        shadingValue = document.createElement('span');
+        shadingValue.className = 'properties-shading-value';
+        const initialShading = simObject.shadingIntensity ?? app.getShadingIntensity();
+        shadingSlider.value = initialShading.toString();
+        shadingValue.textContent = initialShading.toFixed(2);
+        shadingSlider.addEventListener('input', () => {
+          if (!shadingSlider || !shadingValue) {
+            return;
+          }
+          const value = Number.parseFloat(shadingSlider.value);
+          const fallback = simObject.shadingIntensity ?? app.getShadingIntensity();
+          const clamped = Number.isFinite(value) ? Math.min(Math.max(value, 0), 1) : fallback;
+          shadingSlider.value = clamped.toString();
+          shadingValue.textContent = clamped.toFixed(2);
+          app.selectSimObject(simObject.id);
+          app.setShadingIntensity(clamped);
+        });
+        shadingGroup.appendChild(shadingLabel);
+        shadingGroup.appendChild(shadingSlider);
+        shadingGroup.appendChild(shadingValue);
+        form.appendChild(shadingGroup);
+      }
     }
 
-    const segmentsGroup = document.createElement('div');
-    segmentsGroup.className = 'properties-group';
-    const latRow = document.createElement('div');
-    latRow.className = 'properties-inline';
-    const latLabel = document.createElement('label');
-    latLabel.className = 'properties-label';
-    latLabel.textContent = 'Latitude Bands';
-    latLabel.htmlFor = `properties-latitude-${simObject.id}`;
-    const latInput = document.createElement('input');
-    latInput.type = 'number';
-    latInput.id = `properties-latitude-${simObject.id}`;
-    latInput.min = '1';
-    latInput.max = '256';
-    latInput.step = '1';
-    latInput.className = 'properties-number properties-number--compact';
-    latRow.appendChild(latLabel);
-    latRow.appendChild(latInput);
+    const supportsSegments = simObject.type === 'sphere' || simObject.type === 'twirl';
+    let segmentsGroup: HTMLDivElement | undefined;
+    let latInput: HTMLInputElement | undefined;
+    let lonInput: HTMLInputElement | undefined;
 
-    const lonRow = document.createElement('div');
-    lonRow.className = 'properties-inline';
-    const lonLabel = document.createElement('label');
-    lonLabel.className = 'properties-label';
-    lonLabel.textContent = 'Longitude Bands';
-    lonLabel.htmlFor = `properties-longitude-${simObject.id}`;
-    const lonInput = document.createElement('input');
-    lonInput.type = 'number';
-    lonInput.id = `properties-longitude-${simObject.id}`;
-    lonInput.min = '1';
-    lonInput.max = '256';
-    lonInput.step = '1';
-    lonInput.className = 'properties-number properties-number--compact';
-    lonRow.appendChild(lonLabel);
-    lonRow.appendChild(lonInput);
-    segmentsGroup.appendChild(latRow);
-    segmentsGroup.appendChild(lonRow);
+    if (supportsSegments) {
+      segmentsGroup = document.createElement('div');
+      segmentsGroup.className = 'properties-group';
 
-    latInput.addEventListener('change', () => {
-      const lat = Number.parseInt(latInput.value, 10);
-      const current = app.getSphereSegments();
-      const nextLat = Number.isFinite(lat) ? lat : current.lat;
-      app.setSphereSegments(nextLat, current.lon);
-      const updated = app.getSphereSegments();
-      latInput.value = String(updated.lat);
-      lonInput.value = String(updated.lon);
-    });
+      const latRow = document.createElement('div');
+      latRow.className = 'properties-inline';
+      const latLabel = document.createElement('label');
+      latLabel.className = 'properties-label';
+      latLabel.textContent = 'Latitude Bands';
+      latLabel.htmlFor = `properties-latitude-${simObject.id}`;
+      latInput = document.createElement('input');
+      latInput.type = 'number';
+      latInput.id = `properties-latitude-${simObject.id}`;
+      latInput.min = '1';
+      latInput.max = '256';
+      latInput.step = '1';
+      latInput.className = 'properties-number properties-number--compact';
+      latRow.appendChild(latLabel);
+      latRow.appendChild(latInput);
 
-    lonInput.addEventListener('change', () => {
-      const lon = Number.parseInt(lonInput.value, 10);
-      const current = app.getSphereSegments();
-      const nextLon = Number.isFinite(lon) ? lon : current.lon;
-      app.setSphereSegments(current.lat, nextLon);
-      const updated = app.getSphereSegments();
-      latInput.value = String(updated.lat);
-      lonInput.value = String(updated.lon);
-    });
+      const lonRow = document.createElement('div');
+      lonRow.className = 'properties-inline';
+      const lonLabel = document.createElement('label');
+      lonLabel.className = 'properties-label';
+      lonLabel.textContent = 'Longitude Bands';
+      lonLabel.htmlFor = `properties-longitude-${simObject.id}`;
+      lonInput = document.createElement('input');
+      lonInput.type = 'number';
+      lonInput.id = `properties-longitude-${simObject.id}`;
+      lonInput.min = '1';
+      lonInput.max = '256';
+      lonInput.step = '1';
+      lonInput.className = 'properties-number properties-number--compact';
+      lonRow.appendChild(lonLabel);
+      lonRow.appendChild(lonInput);
 
-    form.appendChild(speedGroup);
-    form.appendChild(segmentsGroup);
+      segmentsGroup.appendChild(latRow);
+      segmentsGroup.appendChild(lonRow);
+
+      latInput.addEventListener('change', () => {
+        if (!latInput || !lonInput) {
+          return;
+        }
+        const lat = Number.parseInt(latInput.value, 10);
+        const current = app.getSphereSegments();
+        const nextLat = Number.isFinite(lat) ? lat : current.lat;
+        app.setSphereSegments(nextLat, current.lon);
+        const updated = app.getSphereSegments();
+        latInput.value = String(updated.lat);
+        lonInput.value = String(updated.lon);
+      });
+
+      lonInput.addEventListener('change', () => {
+        if (!latInput || !lonInput) {
+          return;
+        }
+        const lon = Number.parseInt(lonInput.value, 10);
+        const current = app.getSphereSegments();
+        const nextLon = Number.isFinite(lon) ? lon : current.lon;
+        app.setSphereSegments(current.lat, nextLon);
+        const updated = app.getSphereSegments();
+        latInput.value = String(updated.lat);
+        lonInput.value = String(updated.lon);
+      });
+    }
+
+    if (speedGroup) {
+      form.appendChild(speedGroup);
+    }
+    if (segmentsGroup) {
+      form.appendChild(segmentsGroup);
+    }
     details.appendChild(form);
 
     details.addEventListener('toggle', () => {
@@ -882,9 +910,12 @@ export function createPropertiesTab(app: App): HTMLElement {
 
     controls.visibilityCheckbox.checked = simObject.visible;
 
-    controls.speedInput.value = simObject.speedPerTick.toFixed(2);
-    controls.speedInput.dataset.prev = controls.speedInput.value;
-    controls.speedInput.disabled = simObject.type === 'rgpXY';
+    if (controls.speedInput && typeof (simObject as { speedPerTick?: number }).speedPerTick === 'number') {
+      const speed = (simObject as { speedPerTick: number }).speedPerTick;
+      controls.speedInput.value = speed.toFixed(2);
+      controls.speedInput.dataset.prev = controls.speedInput.value;
+      controls.speedInput.disabled = simObject.type === 'rgpXY';
+    }
 
     if (
       controls.planeYG &&
@@ -1031,8 +1062,10 @@ export function createPropertiesTab(app: App): HTMLElement {
       }
     }
 
-    controls.latInput.value = String(segments.lat);
-    controls.lonInput.value = String(segments.lon);
+    if (controls.latInput && controls.lonInput) {
+      controls.latInput.value = String(segments.lat);
+      controls.lonInput.value = String(segments.lon);
+    }
   };
 
   const renderObjects = () => {
