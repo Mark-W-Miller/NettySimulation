@@ -65,8 +65,23 @@ export interface RgpXYObjectDefinition {
   visible?: boolean;
 }
 
+export interface DexelObjectDefinition {
+  type: 'dexel';
+  id: string;
+  axis: 'x' | 'y' | 'z';
+  sign: 1 | -1;
+  size: number;
+  speedPerTick?: number;
+  direction?: 1 | -1;
+  visible?: boolean;
+  anchorId?: string;
+  primarySpeedRatio?: number;
+  secondarySpeedRatio?: number;
+}
+
 export type SimObjectDefinition =
   | SphereObjectDefinition
   | TwirlObjectDefinition
   | TwirlingAxisObjectDefinition
-  | RgpXYObjectDefinition;
+  | RgpXYObjectDefinition
+  | DexelObjectDefinition;

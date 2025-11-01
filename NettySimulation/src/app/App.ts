@@ -23,6 +23,7 @@ import {
   type TwirlObjectDefinition,
   type TwirlingAxisObjectDefinition,
   type RgpXYObjectDefinition,
+  type DexelObjectDefinition,
   type SimObjectDefinition,
 } from '../engine/assets/simTypes';
 import { CameraController } from './camera';
@@ -87,6 +88,9 @@ const RGP_SECONDARY_CONFIG = {
   initialPulseScale: 1,
   invertPulse: false,
 };
+
+const DEXEL_PRIMARY_RATIO = 1;
+const DEXEL_SECONDARY_RATIO = 0.9;
 
 interface RotationStep {
   axis: 'x' | 'y' | 'z';
@@ -188,6 +192,24 @@ interface RgpXYObject {
   sphereOpacity: number;
 }
 
+interface DexelObject {
+  type: 'dexel';
+  id: string;
+  mesh: TwirlMesh;
+  anchorId: string | null;
+  axis: 'x' | 'y' | 'z';
+  sign: 1 | -1;
+  size: number;
+  speedPerTick: number;
+  direction: 1 | -1;
+  visible: boolean;
+  position: Float32Array;
+  primary: RgpRingState;
+  secondary: RgpRingState;
+  primarySpeedRatio: number;
+  secondarySpeedRatio: number;
+}
+
 interface Dexel {
   axis: 'x' | 'y' | 'z';
   sign: 1 | -1;
@@ -199,7 +221,7 @@ interface Dexel {
   sourceId: string;
 }
 
-type SimObject = SphereObject | TwirlObject | TwirlingAxisObject | RgpXYObject;
+type SimObject = SphereObject | TwirlObject | TwirlingAxisObject | RgpXYObject | DexelObject;
 
 interface GhostParticle {
   position: Float32Array;
@@ -297,7 +319,7 @@ export class App {
           plane: 'YG',
           shellSize: 32,
           baseColor: 'azure',
-          visible: true,
+          visible: false,
           shadingIntensity: 0.4,
           opacity: 1,
         },
@@ -309,7 +331,7 @@ export class App {
           plane: 'GB',
           shellSize: 24,
           baseColor: 'crimson',
-          visible: true,
+          visible: false,
           shadingIntensity: 0.55,
           opacity: 0.85,
           initialRotationY: Math.PI / 4,
@@ -331,11 +353,22 @@ export class App {
           id: 'formation-axis',
           speedPerTick: 10,
           direction: 1,
-          visible: true,
+          visible: false,
           size: 1,
           initialRotationY: 0,
           initialRotationZ: 0,
           opacity: 1,
+        },
+        {
+          type: 'dexel',
+          id: 'dexel-template',
+          axis: 'x',
+          sign: 1,
+          size: 24,
+          speedPerTick: 1,
+          direction: 1,
+          visible: false,
+          anchorId: 'rgp-xy',
         },
       ],
     },
@@ -568,6 +601,7 @@ export class App {
     const twirlQueue: TwirlObject[] = [];
     const twirlingAxisQueue: TwirlingAxisObject[] = [];
     const rgpQueue: RgpXYObject[] = [];
+    const dexelQueue: DexelObject[] = [];
 
     for (const simObject of this.simObjects) {
       if (!simObject.visible) {
@@ -579,6 +613,11 @@ export class App {
           this.advanceTwirlingAxis(simObject, beats);
         }
         twirlingAxisQueue.push(simObject);
+        continue;
+      }
+
+      if (simObject.type === 'dexel') {
+        dexelQueue.push(simObject);
         continue;
       }
 
@@ -616,11 +655,19 @@ export class App {
       }
     }
 
-    if (beats > 0 && this.dexels.length > 0) {
+    if (beats > 0) {
       const rotationStep = beats * this.rotationPerBeat;
-      for (const dexel of this.dexels) {
-        dexel.primary.rotationY += rotationStep * dexel.primary.speedPerTick * dexel.primary.direction;
-        dexel.secondary.rotationY += rotationStep * dexel.secondary.speedPerTick * dexel.secondary.direction;
+      if (this.dexels.length > 0) {
+        for (const dexel of this.dexels) {
+          dexel.primary.rotationY += rotationStep * dexel.primary.speedPerTick * dexel.primary.direction;
+          dexel.secondary.rotationY += rotationStep * dexel.secondary.speedPerTick * dexel.secondary.direction;
+        }
+      }
+      if (dexelQueue.length > 0) {
+        for (const dexel of dexelQueue) {
+          dexel.primary.rotationY += rotationStep * dexel.primary.speedPerTick * dexel.direction;
+          dexel.secondary.rotationY += rotationStep * dexel.secondary.speedPerTick * dexel.direction;
+        }
       }
     }
 
@@ -642,7 +689,7 @@ export class App {
     }
 
     const patternRepeats = Math.max(1, this.sphereSegments.lon / 2);
-    const hasTwirlContent = twirlQueue.length > 0 || rgpQueue.length > 0 || this.dexels.length > 0;
+    const hasTwirlContent = twirlQueue.length > 0 || rgpQueue.length > 0 || this.dexels.length > 0 || dexelQueue.length > 0;
 
     if (hasTwirlContent) {
       const sortedTwirlQueue = [...twirlQueue].sort((a, b) => b.shellSize - a.shellSize);
@@ -676,7 +723,11 @@ export class App {
         this.drawRgpRing(gl, twirlProgram, rgpObject.mesh, rgpObject.size, rgpObject.primary, patternRepeats);
       }
 
-      this.drawDexels(gl, twirlProgram, patternRepeats);
+      if (dexelQueue.length > 0) {
+        this.drawDexelCollection(gl, twirlProgram, patternRepeats, dexelQueue);
+      }
+
+      this.drawDexelCollection(gl, twirlProgram, patternRepeats, this.dexels);
 
       gl.disable(gl.BLEND);
 
@@ -801,6 +852,64 @@ export class App {
           sphereColor: new Float32Array(RGP_SPHERE_COLOR),
           sphereOpacity: RGP_SPHERE_OPACITY,
         });
+      } else if (objectDef.type === 'dexel') {
+        const mesh = this.ensureTwirlMesh();
+        const baseSpeed = objectDef.speedPerTick ?? 1;
+        const direction = objectDef.direction ?? 1;
+        const primarySpeedRatio = objectDef.primarySpeedRatio ?? DEXEL_PRIMARY_RATIO;
+        const secondarySpeedRatio = objectDef.secondarySpeedRatio ?? DEXEL_SECONDARY_RATIO;
+
+        const primary = this.createRgpRingState({
+          ...RGP_PRIMARY_CONFIG,
+          speedPerTick: baseSpeed * primarySpeedRatio,
+          direction,
+          initialRotationY: 0,
+          initialPulsePhase: 0,
+          initialPulseScale: 1,
+          pulseSpeed: 0,
+          invertPulse: RGP_PRIMARY_CONFIG.invertPulse,
+        });
+        const secondary = this.createRgpRingState({
+          ...RGP_SECONDARY_CONFIG,
+          speedPerTick: baseSpeed * secondarySpeedRatio,
+          direction,
+          initialRotationY: 0,
+          initialPulsePhase: 0,
+          initialPulseScale: 1,
+          pulseSpeed: 0,
+          invertPulse: RGP_SECONDARY_CONFIG.invertPulse,
+        });
+
+        primary.pulseScale = 1;
+        primary.pulsePhase = 0;
+        primary.pulseSpeed = 0;
+        primary.rotationY = 0;
+        secondary.pulseScale = 1;
+        secondary.pulsePhase = 0;
+        secondary.pulseSpeed = 0;
+        secondary.rotationY = 0;
+
+        const dexelObject: DexelObject = {
+          type: 'dexel',
+          id: objectDef.id,
+          mesh,
+          anchorId: objectDef.anchorId ?? null,
+          axis: objectDef.axis,
+          sign: objectDef.sign,
+          size: Math.max(0.1, objectDef.size),
+          speedPerTick: Math.max(0.1, baseSpeed),
+          direction: direction >= 0 ? 1 : -1,
+          visible: objectDef.visible ?? false,
+          position: new Float32Array([0, 0, 0]),
+          primary,
+          secondary,
+          primarySpeedRatio,
+          secondarySpeedRatio,
+        };
+
+        this.syncDexelRingSpeeds(dexelObject);
+        this.simObjects.push(dexelObject);
+        this.updateDexelAssetPosition(dexelObject);
       } else if (objectDef.type === 'twirling-axis') {
         const mesh = this.ensureTwirlingAxisMesh();
         const scriptSource = objectDef.rotationScript ?? DEFAULT_TWIRLING_AXIS_SCRIPT;
@@ -839,6 +948,12 @@ export class App {
           shadingIntensity: clamp(objectDef.shadingIntensity ?? this.shadingIntensity, 0, 1),
           opacity: clamp(objectDef.opacity ?? 1, 0, 1),
         });
+      }
+    }
+
+    for (const simObject of this.simObjects) {
+      if (simObject.type === 'dexel') {
+        this.updateDexelAssetPosition(simObject);
       }
     }
 
@@ -1011,13 +1126,22 @@ export class App {
 
     if (typeof update.speedPerTick === 'number' && Number.isFinite(update.speedPerTick)) {
       if (selected.type !== 'rgpXY') {
-        selected.speedPerTick = Math.max(0.1, update.speedPerTick);
+        const nextSpeed = Math.max(0.1, update.speedPerTick);
+        selected.speedPerTick = nextSpeed;
+        if (selected.type === 'dexel') {
+          this.syncDexelRingSpeeds(selected);
+        }
       }
     }
 
     if (update.direction !== undefined) {
       if (selected.type !== 'rgpXY') {
-        selected.direction = update.direction >= 0 ? 1 : -1;
+        const nextDirection = update.direction >= 0 ? 1 : -1;
+        selected.direction = nextDirection;
+        if (selected.type === 'dexel') {
+          selected.primary.direction = nextDirection;
+          selected.secondary.direction = nextDirection;
+        }
       }
     }
 
@@ -1055,6 +1179,18 @@ export class App {
       }
       if (sizeChanged) {
         this.updateDexelAnchorsForRgp(selected);
+      }
+    } else if (selected.type === 'dexel') {
+      let sizeChanged = false;
+      if (typeof update.size === 'number' && Number.isFinite(update.size)) {
+        const nextSize = Math.max(0.1, update.size);
+        if (selected.size !== nextSize) {
+          selected.size = nextSize;
+          sizeChanged = true;
+        }
+      }
+      if (sizeChanged) {
+        this.updateDexelAssetPosition(selected);
       }
     } else {
       if (update.plane) {
@@ -1117,6 +1253,7 @@ export class App {
     }
 
     if (changed) {
+      this.updateDexelAnchorsForRgp(target);
       this.notifySimChange();
     }
   }
@@ -1414,6 +1551,24 @@ export class App {
     };
   }
 
+  private cloneRgpRingState(source: RgpRingState): RgpRingState {
+    return {
+      rotationY: source.rotationY,
+      speedPerTick: source.speedPerTick,
+      direction: source.direction,
+      plane: source.plane,
+      shellScale: source.shellScale,
+      baseColor: source.baseColor,
+      shadingIntensity: source.shadingIntensity,
+      opacity: source.opacity,
+      beltHalfAngle: source.beltHalfAngle,
+      pulseSpeed: source.pulseSpeed,
+      pulsePhase: source.pulsePhase,
+      pulseScale: source.pulseScale,
+      invertPulse: source.invertPulse,
+    };
+  }
+
   private updateRgpPulse(ring: RgpRingState, deltaSeconds: number): void {
     ring.pulsePhase = (ring.pulsePhase + deltaSeconds * ring.pulseSpeed * 0.25) % 1;
     const triangle = ring.pulsePhase < 0.5 ? ring.pulsePhase * 2 : (1 - (ring.pulsePhase - 0.5) * 2);
@@ -1564,12 +1719,23 @@ export class App {
     return translation;
   }
 
-  private drawDexels(gl: WebGLRenderingContext, twirlProgram: TwirlProgram, patternRepeats: number): void {
-    if (this.dexels.length === 0) {
+  private drawDexelCollection(
+    gl: WebGLRenderingContext,
+    twirlProgram: TwirlProgram,
+    patternRepeats: number,
+    dexels: ReadonlyArray<{
+      position: Float32Array;
+      mesh: TwirlMesh;
+      size: number;
+      primary: RgpRingState;
+      secondary: RgpRingState;
+    }>,
+  ): void {
+    if (dexels.length === 0) {
       return;
     }
 
-    for (const dexel of this.dexels) {
+    for (const dexel of dexels) {
       this.drawRgpRing(gl, twirlProgram, dexel.mesh, dexel.size, dexel.secondary, patternRepeats, dexel.position);
       this.drawRgpRing(gl, twirlProgram, dexel.mesh, dexel.size, dexel.primary, patternRepeats, dexel.position);
     }
@@ -1596,38 +1762,15 @@ export class App {
 
     this.dexelLastSign[axis] = sign === 1 ? -1 : 1;
 
-    const primaryConfig: RgpRingConfig = {
-      ...RGP_PRIMARY_CONFIG,
-      speedPerTick: rgp.primary.speedPerTick,
-      direction: rgp.primary.direction,
-      initialRotationY: 0,
-      initialPulsePhase: 0,
-      initialPulseScale: 1,
-      pulseSpeed: 0,
-      invertPulse: RGP_PRIMARY_CONFIG.invertPulse,
-    };
-    const secondaryConfig: RgpRingConfig = {
-      ...RGP_SECONDARY_CONFIG,
-      speedPerTick: rgp.secondary.speedPerTick,
-      direction: rgp.secondary.direction,
-      initialRotationY: 0,
-      initialPulsePhase: 0,
-      initialPulseScale: 1,
-      pulseSpeed: 0,
-      invertPulse: RGP_SECONDARY_CONFIG.invertPulse,
-    };
-
-    const primary = this.createRgpRingState(primaryConfig);
-    const secondary = this.createRgpRingState(secondaryConfig);
+    const primary = this.cloneRgpRingState(rgp.primary);
+    const secondary = this.cloneRgpRingState(rgp.secondary);
 
     primary.pulseScale = 1;
     primary.pulsePhase = 0;
     primary.pulseSpeed = 0;
-    primary.rotationY = rgp.primary.rotationY;
     secondary.pulseScale = 1;
     secondary.pulsePhase = 0;
     secondary.pulseSpeed = 0;
-    secondary.rotationY = rgp.secondary.rotationY;
 
     const maxRgpRadius = Math.max(
       this.getRgpRingRadius(rgp.size, rgp.primary, 1),
@@ -1659,7 +1802,7 @@ export class App {
 
   private updateDexelAnchorsForRgp(rgp: RgpXYObject): void {
     if (this.dexels.length === 0) {
-      return;
+      // Continue to update anchored assets if needed.
     }
 
     const maxRgpRadius = Math.max(
@@ -1684,6 +1827,48 @@ export class App {
       dexel.position[2] = 0;
       dexel.position[axisIndex] = dexel.sign * distance;
     }
+
+    for (const simObject of this.simObjects) {
+      if (simObject.type !== 'dexel' || simObject.anchorId !== rgp.id) {
+        continue;
+      }
+      this.updateDexelAssetPosition(simObject, rgp);
+    }
+  }
+
+  private updateDexelAssetPosition(dexel: DexelObject, anchor?: RgpXYObject | null): void {
+    const anchorObject =
+      anchor ??
+      (dexel.anchorId ? this.simObjects.find((object): object is RgpXYObject => object.type === 'rgpXY' && object.id === dexel.anchorId) ?? null : null);
+
+    const maxDexelRadius = Math.max(
+      this.getRgpRingRadius(dexel.size, dexel.primary, 1),
+      this.getRgpRingRadius(dexel.size, dexel.secondary, 1),
+    );
+
+    let distance = maxDexelRadius;
+
+    if (anchorObject) {
+      const maxRgpRadius = Math.max(
+        this.getRgpRingRadius(anchorObject.size, anchorObject.primary, 1),
+        this.getRgpRingRadius(anchorObject.size, anchorObject.secondary, 1),
+      );
+      distance += maxRgpRadius;
+    }
+
+    const axisIndex = dexel.axis === 'x' ? 0 : dexel.axis === 'y' ? 1 : 2;
+    dexel.position[0] = 0;
+    dexel.position[1] = 0;
+    dexel.position[2] = 0;
+    dexel.position[axisIndex] = dexel.sign * distance;
+  }
+
+  private syncDexelRingSpeeds(dexel: DexelObject): void {
+    const baseSpeed = Math.max(0, dexel.speedPerTick);
+    dexel.primary.speedPerTick = baseSpeed * dexel.primarySpeedRatio;
+    dexel.secondary.speedPerTick = baseSpeed * dexel.secondarySpeedRatio;
+    dexel.primary.direction = dexel.direction;
+    dexel.secondary.direction = dexel.direction;
   }
 
   private planeToAxis(plane: 'YG' | 'GB' | 'YB'): 'x' | 'y' | 'z' {

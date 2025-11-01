@@ -132,6 +132,7 @@ export function createPropertiesTab(app: App): HTMLElement {
 
     const isTwirlingAxis = simObject.type === 'twirling-axis';
     const isRgp = simObject.type === 'rgpXY';
+    const isDexel = simObject.type === 'dexel';
 
 
     const speedGroup = document.createElement('div');
@@ -175,7 +176,7 @@ export function createPropertiesTab(app: App): HTMLElement {
     let shadingSlider: HTMLInputElement | undefined;
     let shadingValue: HTMLSpanElement | undefined;
 
-    if (!isTwirlingAxis && !isRgp) {
+    if (!isTwirlingAxis && !isRgp && !isDexel) {
       const planeGroup = document.createElement('fieldset');
       planeGroup.className = 'properties-fieldset';
       const planeLegend = document.createElement('legend');
@@ -283,7 +284,7 @@ export function createPropertiesTab(app: App): HTMLElement {
       return detailsEl;
     };
 
-    if (isTwirlingAxis || isRgp) {
+    if (isTwirlingAxis || isRgp || isDexel) {
       const defaultScript = app.getDefaultTwirlingAxisScript();
       const presets = app.getTwirlingAxisScriptPresets();
       const defaultSphereOpacity = app.getDefaultRgpSphereOpacity();
@@ -692,7 +693,7 @@ export function createPropertiesTab(app: App): HTMLElement {
       form.appendChild(pulseGroup);
     }
 
-    if (!isTwirlingAxis && !isRgp) {
+    if (!isTwirlingAxis && !isRgp && !isDexel) {
       const opacityGroup = document.createElement('div');
       opacityGroup.className = 'properties-group';
       const opacityLabel = document.createElement('label');
@@ -871,6 +872,7 @@ export function createPropertiesTab(app: App): HTMLElement {
     selectedId: string | null,
     segments: { lat: number; lon: number },
   ) => {
+    const isDexel = simObject.type === 'dexel';
     const shouldOpen = openObjects.has(simObject.id);
     if (controls.details.open !== shouldOpen) {
       controls.details.open = shouldOpen;
@@ -935,7 +937,10 @@ export function createPropertiesTab(app: App): HTMLElement {
     }
 
     if (controls.sizeInput) {
-      const value = simObject.type === 'twirling-axis' || simObject.type === 'rgpXY' ? simObject.size : 1;
+      const value =
+        simObject.type === 'twirling-axis' || simObject.type === 'rgpXY' || simObject.type === 'dexel'
+          ? simObject.size
+          : 1;
       controls.sizeInput.value = value.toFixed(2);
       controls.sizeInput.dataset.prev = controls.sizeInput.value;
     }
