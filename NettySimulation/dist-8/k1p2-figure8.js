@@ -15,15 +15,37 @@ export function k1p2Figure8Chunk(cycleTicStart, ticsPerBeat, cycleTics, R, a = 1
     return points;
 }
 export class K1P2Figure8 {
-    cycleTics;
-    ticsPerBeat;
-    a;
-    cycleTicStart;
-    rotation;
     constructor(cycleTics, ticsPerBeat, cycleTicStart = 0, a = 1, initialRotation = 0) {
-        this.cycleTics = cycleTics;
-        this.ticsPerBeat = ticsPerBeat;
-        this.a = a;
+        Object.defineProperty(this, "cycleTics", {
+            enumerable: true,
+            configurable: true,
+            writable: true,
+            value: cycleTics
+        });
+        Object.defineProperty(this, "ticsPerBeat", {
+            enumerable: true,
+            configurable: true,
+            writable: true,
+            value: ticsPerBeat
+        });
+        Object.defineProperty(this, "a", {
+            enumerable: true,
+            configurable: true,
+            writable: true,
+            value: a
+        });
+        Object.defineProperty(this, "cycleTicStart", {
+            enumerable: true,
+            configurable: true,
+            writable: true,
+            value: void 0
+        });
+        Object.defineProperty(this, "rotation", {
+            enumerable: true,
+            configurable: true,
+            writable: true,
+            value: void 0
+        });
         this.cycleTicStart = ((cycleTicStart % cycleTics) + cycleTics) % cycleTics;
         this.rotation = initialRotation;
     }

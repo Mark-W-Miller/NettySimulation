@@ -1,5 +1,5 @@
 // src/demo-canvas.ts
-import { K1P2Figure8 } from './k1p2-figure8';
+import { K1P2Figure8 } from './k1p2-figure8.js';
 const canvas = document.createElement('canvas');
 canvas.width = 640;
 canvas.height = 640;
