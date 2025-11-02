@@ -33,14 +33,14 @@ import {
   drawTwirlingAxis,
 } from './assets/twirlingAxisAsset';
 import {
-  createTwirl8MeshSolid,
-  disposeTwirl8Mesh,
-  createTwirl8Program,
-  disposeTwirl8Program,
-  useTwirl8Program,
-  setTwirl8SharedUniforms,
-  drawTwirl8,
-} from './assets/twirl8Asset';
+  createK1P2Mesh,
+  disposeK1P2Mesh,
+  createK1P2Program,
+  disposeK1P2Program,
+  useK1P2Program,
+  setK1P2SharedUniforms,
+  drawK1P2,
+} from './assets/K1P2Asset';
 
 export const Assets = {
   createAxisSet,
@@ -67,13 +67,13 @@ export const Assets = {
   createTwirlingAxisMesh,
   disposeTwirlingAxisMesh,
   drawTwirlingAxis,
-  createTwirl8MeshSolid,
-  disposeTwirl8Mesh,
-  createTwirl8Program,
-  disposeTwirl8Program,
-  useTwirl8Program,
-  setTwirl8SharedUniforms,
-  drawTwirl8,
+  createTwirl8Mesh: createK1P2Mesh,
+  disposeTwirl8Mesh: disposeK1P2Mesh,
+  createTwirl8Program: createK1P2Program,
+  disposeTwirl8Program: disposeK1P2Program,
+  useTwirl8Program: useK1P2Program,
+  setTwirl8SharedUniforms: setK1P2SharedUniforms,
+  drawTwirl8: drawK1P2,
 };
 
 export type {
@@ -97,4 +97,8 @@ export type {
   TwirlDrawParams,
 } from './assets/twirlAsset';
 export type { TwirlingAxisMesh } from './assets/twirlingAxisAsset';
-export type { Twirl8Mesh, Twirl8Program, Twirl8SharedUniforms } from './assets/twirl8Asset';
+export type {
+  K1P2Mesh as Twirl8Mesh,
+  K1P2Program as Twirl8Program,
+  K1P2SharedUniforms as Twirl8SharedUniforms,
+} from './assets/K1P2Asset';

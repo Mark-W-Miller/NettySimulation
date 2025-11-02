@@ -73,7 +73,6 @@ export function createPropertiesTab(app: App): HTMLElement {
     scriptSelect?: HTMLSelectElement;
     twirl8WidthInput?: HTMLInputElement;
     twirl8AngleInput?: HTMLInputElement;
-    twirl8ThicknessInput?: HTMLInputElement;
   };
 
   const objectControls = new Map<string, ObjectControls>();
@@ -288,7 +287,6 @@ export function createPropertiesTab(app: App): HTMLElement {
     let secondaryOpacityValue: HTMLSpanElement | undefined;
     let twirl8WidthInput: HTMLInputElement | undefined;
     let twirl8AngleInput: HTMLInputElement | undefined;
-    let twirl8ThicknessInput: HTMLInputElement | undefined;
 
     const makeSubDetails = (label: string) => {
       const detailsEl = document.createElement('details');
@@ -808,34 +806,6 @@ export function createPropertiesTab(app: App): HTMLElement {
       widthGroup.appendChild(widthLabel);
       widthGroup.appendChild(twirl8WidthInput);
 
-      const thicknessGroup = document.createElement('div');
-      thicknessGroup.className = 'properties-group';
-      const thicknessLabel = document.createElement('label');
-      thicknessLabel.className = 'properties-label';
-      thicknessLabel.textContent = 'Thickness';
-      thicknessLabel.htmlFor = `properties-twirl8-thickness-${simObject.id}`;
-      twirl8ThicknessInput = document.createElement('input');
-      twirl8ThicknessInput.type = 'number';
-      twirl8ThicknessInput.id = `properties-twirl8-thickness-${simObject.id}`;
-      twirl8ThicknessInput.min = '0.01';
-      twirl8ThicknessInput.step = '0.01';
-      twirl8ThicknessInput.className = 'properties-number properties-number--compact';
-      twirl8ThicknessInput.value = simObject.thickness.toFixed(2);
-      twirl8ThicknessInput.dataset.prev = twirl8ThicknessInput.value;
-      twirl8ThicknessInput.addEventListener('change', () => {
-        if (!twirl8ThicknessInput) {
-          return;
-        }
-        const raw = Number.parseFloat(twirl8ThicknessInput.value);
-        const prev = Number.parseFloat(twirl8ThicknessInput.dataset.prev ?? '0.1');
-        const next = Number.isFinite(raw) ? Math.max(0.01, raw) : prev;
-        twirl8ThicknessInput.value = next.toFixed(2);
-        twirl8ThicknessInput.dataset.prev = twirl8ThicknessInput.value;
-        applyUpdate({ twirl8Thickness: next });
-      });
-      thicknessGroup.appendChild(thicknessLabel);
-      thicknessGroup.appendChild(twirl8ThicknessInput);
-
       const angleGroup = document.createElement('div');
       angleGroup.className = 'properties-group';
       const angleLabel = document.createElement('label');
@@ -867,7 +837,6 @@ export function createPropertiesTab(app: App): HTMLElement {
       angleGroup.appendChild(twirl8AngleInput);
 
       form.appendChild(widthGroup);
-      form.appendChild(thicknessGroup);
       form.appendChild(angleGroup);
     }
 
@@ -993,7 +962,6 @@ export function createPropertiesTab(app: App): HTMLElement {
       secondaryOpacityValue,
       twirl8WidthInput,
       twirl8AngleInput,
-      twirl8ThicknessInput,
     };
   };
 
@@ -1069,7 +1037,7 @@ export function createPropertiesTab(app: App): HTMLElement {
         controls.twirl8WidthInput.dataset.prev = controls.twirl8WidthInput.value;
         controls.twirl8WidthInput.disabled = false;
       } else {
-        controls.twirl8WidthInput.value = '1.00';
+        controls.twirl8WidthInput.value = '0.30';
         controls.twirl8WidthInput.dataset.prev = controls.twirl8WidthInput.value;
         controls.twirl8WidthInput.disabled = true;
       }
@@ -1088,17 +1056,6 @@ export function createPropertiesTab(app: App): HTMLElement {
       }
     }
 
-    if (controls.twirl8ThicknessInput) {
-      if (simObject.type === 'twirl8') {
-        controls.twirl8ThicknessInput.value = simObject.thickness.toFixed(2);
-        controls.twirl8ThicknessInput.dataset.prev = controls.twirl8ThicknessInput.value;
-        controls.twirl8ThicknessInput.disabled = false;
-      } else {
-        controls.twirl8ThicknessInput.value = '0.10';
-        controls.twirl8ThicknessInput.dataset.prev = controls.twirl8ThicknessInput.value;
-        controls.twirl8ThicknessInput.disabled = true;
-      }
-    }
 
     if (controls.beltInput) {
       const beltValue = simObject.type === 'twirl' ? simObject.beltHalfAngle : 0;
