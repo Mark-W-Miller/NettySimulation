@@ -240,6 +240,7 @@ interface Twirl8Object {
   rotationY: number;
   speedPerTick: number;
   direction: 1 | -1;
+  thickness: number;
 }
 
 type SimObject = SphereObject | TwirlObject | TwirlingAxisObject | RgpXYObject | DexelObject | Twirl8Object;
@@ -266,6 +267,7 @@ type SimObjectUpdatePayload = Partial<{
   sphereOpacity: number;
   twirl8Width: number;
   twirl8AngleDeg: number;
+  twirl8Thickness: number;
 }>;
 
 interface SimulationSegmentDefinition {
@@ -409,6 +411,7 @@ export class App {
           color: 'white',
           width: 1,
           lobeRotationDeg: 20,
+          thickness: 0.15,
         },
       ],
     },
@@ -861,12 +864,14 @@ export class App {
         const modelMatrix = this.buildTwirl8ModelMatrix(ring.axis, effectiveRadius, ring.rotationY);
         const colorVec = this.getBaseColorVector(ring.color, ring.opacity);
         const effectiveWidth = Math.max(0.05, ring.width * widthFactor);
+        const effectiveThickness = Math.max(0.01, ring.thickness * widthFactor);
         const dynamicLobeAngle = ring.lobeAngle * lobeFactor;
         Assets.drawTwirl8(gl, this.twirl8Program, this.twirl8Mesh, {
           modelMatrix,
           color: colorVec,
           width: effectiveWidth,
           lobeRotation: dynamicLobeAngle,
+          thickness: effectiveThickness,
         });
       }
 
@@ -1051,6 +1056,7 @@ export class App {
         const def = objectDef as Twirl8ObjectDefinition;
         const width = Math.max(0.1, def.width ?? 1);
         const lobeAngle = (def.lobeRotationDeg ?? 20) * DEG_TO_RAD;
+        const thickness = Math.max(0.01, def.thickness ?? 0.1);
         this.simObjects.push({
           type: 'twirl8',
           id: def.id,
@@ -1061,6 +1067,7 @@ export class App {
           visible: def.visible ?? true,
           width,
           lobeAngle,
+          thickness,
           rotationY: (def.initialRotationDeg ?? 0) * DEG_TO_RAD,
           speedPerTick: Math.max(0.1, def.speedPerTick ?? 1),
           direction: def.direction ?? 1,
@@ -1374,6 +1381,9 @@ export class App {
       }
       if (typeof update.twirl8AngleDeg === 'number' && Number.isFinite(update.twirl8AngleDeg)) {
         selected.lobeAngle = update.twirl8AngleDeg * DEG_TO_RAD;
+      }
+      if (typeof update.twirl8Thickness === 'number' && Number.isFinite(update.twirl8Thickness)) {
+        selected.thickness = Math.max(0.01, update.twirl8Thickness);
       }
     } else {
       if (update.plane) {
