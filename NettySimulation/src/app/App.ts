@@ -485,7 +485,7 @@ export class App {
     const twirlProgram = Assets.createTwirlProgram(gl);
     const twirl8Program = Assets.createTwirl8Program(gl);
     const sphere = Assets.createSphereMesh(gl, this.sphereSegments.lat, this.sphereSegments.lon);
-    const twirl8 = Assets.createTwirl8Mesh(gl, 256);
+    const twirl8 = Assets.createTwirl8MeshSolid(gl);
     const twirl = Assets.createTwirlMesh(
       gl,
       Math.max(32, this.sphereSegments.lon * 4),
@@ -869,9 +869,6 @@ export class App {
         Assets.drawTwirl8(gl, this.twirl8Program, this.twirl8Mesh, {
           modelMatrix,
           color: colorVec,
-          width: effectiveWidth,
-          lobeRotation: dynamicLobeAngle,
-          thickness: effectiveThickness,
         });
       }
 

@@ -33,7 +33,7 @@ import {
   drawTwirlingAxis,
 } from './assets/twirlingAxisAsset';
 import {
-  createTwirl8Mesh,
+  createTwirl8MeshSolid,
   disposeTwirl8Mesh,
   createTwirl8Program,
   disposeTwirl8Program,
@@ -67,7 +67,7 @@ export const Assets = {
   createTwirlingAxisMesh,
   disposeTwirlingAxisMesh,
   drawTwirlingAxis,
-  createTwirl8Mesh,
+  createTwirl8MeshSolid,
   disposeTwirl8Mesh,
   createTwirl8Program,
   disposeTwirl8Program,
