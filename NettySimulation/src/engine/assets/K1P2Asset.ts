@@ -41,9 +41,10 @@ export function createK1P2Mesh(gl: WebGLRenderingContext, segments = 128): K1P2M
     const t = (i / segs) * Math.PI * 2;
     const sinT = Math.sin(t);
     const cosT = Math.cos(t);
-    const denom = 1 + sinT * sinT;
-    const x = (sinT / denom) * Math.SQRT2;
-    const y = (sinT * cosT / denom) * Math.SQRT2;
+    const widthShape = 0.65 + 0.35 * Math.abs(sinT);
+    const heightShape = 0.55 + 0.45 * Math.abs(sinT);
+    const x = sinT * widthShape;
+    const y = sinT * cosT * heightShape;
     positions.push(x, y, 0);
     lobeSigns.push(x >= 0 ? 1 : -1);
     indices.push(i);
