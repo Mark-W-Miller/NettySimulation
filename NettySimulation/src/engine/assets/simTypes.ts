@@ -73,6 +73,11 @@ export interface Twirl8ObjectDefinition {
   color: BaseColor;
   opacity?: number;
   visible?: boolean;
+  width?: number;
+  lobeRotationDeg?: number;
+  speedPerTick?: number;
+  direction?: 1 | -1;
+  initialRotationDeg?: number;
 }
 
 export interface DexelObjectDefinition {

@@ -1,7 +1,8 @@
-// twirl8Asset.ts — simple line-ring (circle) asset oriented around a principal axis
+// twirl8Asset.ts — figure-eight ribbon asset with per-lobe twist controls
 
 export interface Twirl8Mesh {
   positionBuffer: WebGLBuffer;
+  lobeBuffer: WebGLBuffer;
   indexBuffer: WebGLBuffer;
   indexCount: number;
 }
@@ -9,10 +10,13 @@ export interface Twirl8Mesh {
 export interface Twirl8Program {
   program: WebGLProgram;
   attribPosition: number;
+  attribLobeSign: number;
   uniformModel: WebGLUniformLocation;
   uniformView: WebGLUniformLocation;
   uniformProjection: WebGLUniformLocation;
   uniformColor: WebGLUniformLocation;
+  uniformWidth: WebGLUniformLocation;
+  uniformLobeRotation: WebGLUniformLocation;
 }
 
 export interface Twirl8SharedUniforms {
@@ -23,37 +27,60 @@ export interface Twirl8SharedUniforms {
 export interface Twirl8DrawParams {
   modelMatrix: Float32Array;
   color: Float32Array; // vec4 RGBA
+  width: number;
+  lobeRotation: number;
 }
 
 export function createTwirl8Mesh(gl: WebGLRenderingContext, segments = 128): Twirl8Mesh {
-  const segs = Math.max(16, Math.floor(segments));
+  const perLobe = Math.max(16, Math.floor(segments / 2));
   const positions: number[] = [];
+  const lobeFlags: number[] = [];
   const indices: number[] = [];
 
-  for (let i = 0; i < segs; i += 1) {
-    const t = (i / segs) * Math.PI * 2;
-    const x = Math.cos(t);
-    const y = Math.sin(t);
-    positions.push(x, y, 0);
-    indices.push(i);
-  }
-  // Close the loop
-  indices.push(0);
+  const pushVertex = (x: number, y: number, z: number, lobeSign: number) => {
+    const index = positions.length / 3;
+    positions.push(x, y, z);
+    lobeFlags.push(lobeSign);
+    indices.push(index);
+  };
+
+  const radius = 0.55;
+  const centerOffset = radius;
+
+  const generateLobe = (sign: 1 | -1) => {
+    const centerY = sign * centerOffset;
+    const startAngle = sign > 0 ? -Math.PI / 2 : Math.PI / 2;
+    for (let i = 0; i <= perLobe; i += 1) {
+      const theta = startAngle + (i / perLobe) * Math.PI * 2;
+      const x = Math.cos(theta) * radius;
+      const y = centerY + Math.sin(theta) * radius;
+      const z = 0;
+      pushVertex(x, y, z, sign);
+    }
+  };
+
+  generateLobe(1);
+  generateLobe(-1);
 
   const positionBuffer = gl.createBuffer();
+  const lobeBuffer = gl.createBuffer();
   const indexBuffer = gl.createBuffer();
-  if (!positionBuffer || !indexBuffer) {
+  if (!positionBuffer || !indexBuffer || !lobeBuffer) {
     throw new Error('Failed to allocate buffers for twirl-8 mesh.');
   }
 
   gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
   gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(positions), gl.STATIC_DRAW);
 
+  gl.bindBuffer(gl.ARRAY_BUFFER, lobeBuffer);
+  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(lobeFlags), gl.STATIC_DRAW);
+
   gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, indexBuffer);
   gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(indices), gl.STATIC_DRAW);
 
   return {
     positionBuffer,
+    lobeBuffer,
     indexBuffer,
     indexCount: indices.length,
   };
@@ -62,17 +89,34 @@ export function createTwirl8Mesh(gl: WebGLRenderingContext, segments = 128): Twi
 export function disposeTwirl8Mesh(gl: WebGLRenderingContext, mesh: Twirl8Mesh | null): void {
   if (!mesh) return;
   gl.deleteBuffer(mesh.positionBuffer);
+  gl.deleteBuffer(mesh.lobeBuffer);
   gl.deleteBuffer(mesh.indexBuffer);
 }
 
 export function createTwirl8Program(gl: WebGLRenderingContext): Twirl8Program {
   const vertexShaderSource = `
     attribute vec3 aPosition;
+    attribute float aLobeSign;
     uniform mat4 uModelMatrix;
     uniform mat4 uViewMatrix;
     uniform mat4 uProjectionMatrix;
+    uniform float uWidth;
+    uniform float uLobeRotation;
     void main() {
-      gl_Position = uProjectionMatrix * uViewMatrix * uModelMatrix * vec4(aPosition, 1.0);
+      float lobeSign = aLobeSign >= 0.0 ? 1.0 : -1.0;
+      float angle = uLobeRotation * lobeSign;
+
+      vec3 position = aPosition;
+      position.x *= uWidth;
+
+      float cosA = cos(angle);
+      float sinA = sin(angle);
+      float x = position.x;
+      float z = position.z;
+      position.x = x * cosA + z * sinA;
+      position.z = -x * sinA + z * cosA;
+
+      gl_Position = uProjectionMatrix * uViewMatrix * uModelMatrix * vec4(position, 1.0);
     }
   `;
 
@@ -105,18 +149,24 @@ export function createTwirl8Program(gl: WebGLRenderingContext): Twirl8Program {
   gl.deleteShader(fs);
 
   const attribPosition = gl.getAttribLocation(program, 'aPosition');
+  const attribLobeSign = gl.getAttribLocation(program, 'aLobeSign');
   const uniformModel = getRequiredUniform(gl, program, 'uModelMatrix');
   const uniformView = getRequiredUniform(gl, program, 'uViewMatrix');
   const uniformProjection = getRequiredUniform(gl, program, 'uProjectionMatrix');
   const uniformColor = getRequiredUniform(gl, program, 'uColor');
+  const uniformWidth = getRequiredUniform(gl, program, 'uWidth');
+  const uniformLobeRotation = getRequiredUniform(gl, program, 'uLobeRotation');
 
   return {
     program,
     attribPosition,
+    attribLobeSign,
     uniformModel,
     uniformView,
     uniformProjection,
     uniformColor,
+    uniformWidth,
+    uniformLobeRotation,
   };
 }
 
@@ -146,10 +196,16 @@ export function drawTwirl8(
 ): void {
   gl.uniformMatrix4fv(program.uniformModel, false, params.modelMatrix);
   gl.uniform4fv(program.uniformColor, params.color);
+  gl.uniform1f(program.uniformWidth, params.width);
+  gl.uniform1f(program.uniformLobeRotation, params.lobeRotation);
 
   gl.bindBuffer(gl.ARRAY_BUFFER, mesh.positionBuffer);
   gl.vertexAttribPointer(program.attribPosition, 3, gl.FLOAT, false, 0, 0);
   gl.enableVertexAttribArray(program.attribPosition);
+
+  gl.bindBuffer(gl.ARRAY_BUFFER, mesh.lobeBuffer);
+  gl.vertexAttribPointer(program.attribLobeSign, 1, gl.FLOAT, false, 0, 0);
+  gl.enableVertexAttribArray(program.attribLobeSign);
 
   gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, mesh.indexBuffer);
 

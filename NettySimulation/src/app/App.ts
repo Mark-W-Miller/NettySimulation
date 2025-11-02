@@ -95,6 +95,9 @@ const RGP_SECONDARY_CONFIG = {
 const DEXEL_PRIMARY_RATIO = 1;
 const DEXEL_SECONDARY_RATIO = 0.9;
 
+const DEG_TO_RAD = Math.PI / 180;
+const RAD_TO_DEG = 180 / Math.PI;
+
 interface RotationStep {
   axis: 'x' | 'y' | 'z';
   direction: 1 | -1;
@@ -232,6 +235,11 @@ interface Twirl8Object {
   color: BaseColor;
   opacity: number;
   visible: boolean;
+  width: number;
+  lobeAngle: number;
+  rotationY: number;
+  speedPerTick: number;
+  direction: 1 | -1;
 }
 
 type SimObject = SphereObject | TwirlObject | TwirlingAxisObject | RgpXYObject | DexelObject | Twirl8Object;
@@ -256,7 +264,9 @@ type SimObjectUpdatePayload = Partial<{
   beltHalfAngle: number;
   pulseSpeed: number;
   sphereOpacity: number;
-}>; 
+  twirl8Width: number;
+  twirl8AngleDeg: number;
+}>;
 
 interface SimulationSegmentDefinition {
   id: string;
@@ -391,7 +401,15 @@ export class App {
       id: 'RGP_Pray',
       name: 'RGP_Pray',
       objects: [
-        { type: 'twirl8', id: 'twirl-8-y', axis: 'y', radius: 24, color: 'white' },
+        {
+          type: 'twirl8',
+          id: 'twirl-8-y',
+          axis: 'y',
+          radius: 24,
+          color: 'white',
+          width: 1,
+          lobeRotationDeg: 20,
+        },
       ],
     },
   ];
@@ -405,7 +423,7 @@ export class App {
     this.rotatedAxisNormalMatrix = mat3FromMat4(this.rotatedAxisModelMatrix);
   }
 
-  private buildTwirl8ModelMatrix(axis: 'x' | 'y' | 'z', radius: number): Float32Array {
+  private buildTwirl8ModelMatrix(axis: 'x' | 'y' | 'z', radius: number, spin: number): Float32Array {
     const norm = Math.max(0.01, radius / this.defaultShellSize);
     let rotation = this.identityModelMatrix;
     switch (axis) {
@@ -420,7 +438,26 @@ export class App {
         break;
     }
     const scale = mat4Scale(norm, norm, norm);
-    return mat4Multiply(rotation, scale);
+    const oriented = mat4Multiply(rotation, scale);
+
+    if (Math.abs(spin) < 1e-6) {
+      return oriented;
+    }
+
+    let axialRotation = this.identityModelMatrix;
+    switch (axis) {
+      case 'x':
+        axialRotation = mat4FromXRotation(spin);
+        break;
+      case 'y':
+        axialRotation = mat4FromYRotation(spin);
+        break;
+      case 'z':
+        axialRotation = mat4FromZRotation(spin);
+        break;
+    }
+
+    return mat4Multiply(axialRotation, oriented);
   }
 
   mount(host: HTMLElement): void {
@@ -677,6 +714,9 @@ export class App {
       }
 
       if (simObject.type === 'twirl8') {
+        if (beats > 0) {
+          simObject.rotationY += beats * this.rotationPerBeat * simObject.speedPerTick * simObject.direction;
+        }
         twirl8Queue.push(simObject);
         continue;
       }
@@ -808,11 +848,25 @@ export class App {
       gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
 
       for (const ring of twirl8Queue) {
-        const modelMatrix = this.buildTwirl8ModelMatrix(ring.axis, ring.radius);
+        const normalizedRotation = ((ring.rotationY / (Math.PI * 2)) % 1 + 1) % 1;
+        const pulse =
+          normalizedRotation < 0.5
+            ? normalizedRotation * 2
+            : (1 - normalizedRotation) * 2;
+        const radiusFactor = Math.max(0.05, pulse);
+        const widthFactor = 0.15 + 0.85 * pulse;
+        const lobeFactor = 0.25 + 0.75 * pulse;
+
+        const effectiveRadius = Math.max(0.01, ring.radius * radiusFactor);
+        const modelMatrix = this.buildTwirl8ModelMatrix(ring.axis, effectiveRadius, ring.rotationY);
         const colorVec = this.getBaseColorVector(ring.color, ring.opacity);
+        const effectiveWidth = Math.max(0.05, ring.width * widthFactor);
+        const dynamicLobeAngle = ring.lobeAngle * lobeFactor;
         Assets.drawTwirl8(gl, this.twirl8Program, this.twirl8Mesh, {
           modelMatrix,
           color: colorVec,
+          width: effectiveWidth,
+          lobeRotation: dynamicLobeAngle,
         });
       }
 
@@ -995,6 +1049,8 @@ export class App {
         this.updateDexelAssetPosition(dexelObject);
       } else if (objectDef.type === 'twirl8') {
         const def = objectDef as Twirl8ObjectDefinition;
+        const width = Math.max(0.1, def.width ?? 1);
+        const lobeAngle = (def.lobeRotationDeg ?? 20) * DEG_TO_RAD;
         this.simObjects.push({
           type: 'twirl8',
           id: def.id,
@@ -1003,6 +1059,11 @@ export class App {
           color: def.color,
           opacity: clamp(def.opacity ?? 1, 0, 1),
           visible: def.visible ?? true,
+          width,
+          lobeAngle,
+          rotationY: (def.initialRotationDeg ?? 0) * DEG_TO_RAD,
+          speedPerTick: Math.max(0.1, def.speedPerTick ?? 1),
+          direction: def.direction ?? 1,
         });
       } else if (objectDef.type === 'twirling-axis') {
         const mesh = this.ensureTwirlingAxisMesh();
@@ -1224,6 +1285,7 @@ export class App {
         case 'sphere':
         case 'twirl':
         case 'twirling-axis':
+        case 'twirl8':
           selected.speedPerTick = nextSpeed;
           break;
         case 'dexel':
@@ -1241,6 +1303,7 @@ export class App {
         case 'sphere':
         case 'twirl':
         case 'twirling-axis':
+        case 'twirl8':
           selected.direction = nextDirection;
           break;
         case 'dexel':
@@ -1306,7 +1369,12 @@ export class App {
         this.updateDexelAssetPosition(selected);
       }
     } else if (selected.type === 'twirl8') {
-      // Twirl8 currently has no additional editable properties beyond opacity/visibility.
+      if (typeof update.twirl8Width === 'number' && Number.isFinite(update.twirl8Width)) {
+        selected.width = Math.max(0.1, update.twirl8Width);
+      }
+      if (typeof update.twirl8AngleDeg === 'number' && Number.isFinite(update.twirl8AngleDeg)) {
+        selected.lobeAngle = update.twirl8AngleDeg * DEG_TO_RAD;
+      }
     } else {
       if (update.plane) {
         selected.plane = update.plane;

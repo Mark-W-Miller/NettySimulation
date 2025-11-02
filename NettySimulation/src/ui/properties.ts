@@ -18,6 +18,8 @@ const BASE_COLOR_OPTIONS = [
 
 type SimObjectView = ReturnType<App['getSimObjects']>[number];
 
+const RAD_TO_DEG = 180 / Math.PI;
+
 export function createPropertiesTab(app: App): HTMLElement {
   const container = document.createElement('div');
   container.className = 'properties-tab';
@@ -69,6 +71,8 @@ export function createPropertiesTab(app: App): HTMLElement {
     sizeInput?: HTMLInputElement;
     scriptInput?: HTMLInputElement;
     scriptSelect?: HTMLSelectElement;
+    twirl8WidthInput?: HTMLInputElement;
+    twirl8AngleInput?: HTMLInputElement;
   };
 
   const objectControls = new Map<string, ObjectControls>();
@@ -281,6 +285,8 @@ export function createPropertiesTab(app: App): HTMLElement {
     let secondaryShadingValue: HTMLSpanElement | undefined;
     let secondaryOpacitySlider: HTMLInputElement | undefined;
     let secondaryOpacityValue: HTMLSpanElement | undefined;
+    let twirl8WidthInput: HTMLInputElement | undefined;
+    let twirl8AngleInput: HTMLInputElement | undefined;
 
     const makeSubDetails = (label: string) => {
       const detailsEl = document.createElement('details');
@@ -771,6 +777,69 @@ export function createPropertiesTab(app: App): HTMLElement {
       }
     }
 
+    if (simObject.type === 'twirl8') {
+      const widthGroup = document.createElement('div');
+      widthGroup.className = 'properties-group';
+      const widthLabel = document.createElement('label');
+      widthLabel.className = 'properties-label';
+      widthLabel.textContent = 'Width Scale';
+      widthLabel.htmlFor = `properties-twirl8-width-${simObject.id}`;
+      twirl8WidthInput = document.createElement('input');
+      twirl8WidthInput.type = 'number';
+      twirl8WidthInput.id = `properties-twirl8-width-${simObject.id}`;
+      twirl8WidthInput.min = '0.1';
+      twirl8WidthInput.step = '0.05';
+      twirl8WidthInput.className = 'properties-number properties-number--compact';
+      twirl8WidthInput.value = simObject.width.toFixed(2);
+      twirl8WidthInput.dataset.prev = twirl8WidthInput.value;
+      twirl8WidthInput.addEventListener('change', () => {
+        if (!twirl8WidthInput) {
+          return;
+        }
+        const raw = Number.parseFloat(twirl8WidthInput.value);
+        const prev = Number.parseFloat(twirl8WidthInput.dataset.prev ?? '1');
+        const next = Number.isFinite(raw) ? Math.max(0.1, raw) : prev;
+        twirl8WidthInput.value = next.toFixed(2);
+        twirl8WidthInput.dataset.prev = twirl8WidthInput.value;
+        applyUpdate({ twirl8Width: next });
+      });
+      widthGroup.appendChild(widthLabel);
+      widthGroup.appendChild(twirl8WidthInput);
+
+      const angleGroup = document.createElement('div');
+      angleGroup.className = 'properties-group';
+      const angleLabel = document.createElement('label');
+      angleLabel.className = 'properties-label';
+      angleLabel.textContent = 'Lobe Twist Angle (°)';
+      angleLabel.htmlFor = `properties-twirl8-angle-${simObject.id}`;
+      twirl8AngleInput = document.createElement('input');
+      twirl8AngleInput.type = 'number';
+      twirl8AngleInput.id = `properties-twirl8-angle-${simObject.id}`;
+      twirl8AngleInput.step = '0.5';
+      twirl8AngleInput.min = '-180';
+      twirl8AngleInput.max = '180';
+      twirl8AngleInput.className = 'properties-number properties-number--compact';
+      const angleDeg = simObject.lobeAngle * RAD_TO_DEG;
+      twirl8AngleInput.value = angleDeg.toFixed(1);
+      twirl8AngleInput.dataset.prev = twirl8AngleInput.value;
+      twirl8AngleInput.addEventListener('change', () => {
+        if (!twirl8AngleInput) {
+          return;
+        }
+        const raw = Number.parseFloat(twirl8AngleInput.value);
+        const prev = Number.parseFloat(twirl8AngleInput.dataset.prev ?? '20');
+        const next = Number.isFinite(raw) ? Math.min(Math.max(raw, -180), 180) : prev;
+        twirl8AngleInput.value = next.toFixed(1);
+        twirl8AngleInput.dataset.prev = twirl8AngleInput.value;
+        applyUpdate({ twirl8AngleDeg: next });
+      });
+      angleGroup.appendChild(angleLabel);
+      angleGroup.appendChild(twirl8AngleInput);
+
+      form.appendChild(widthGroup);
+      form.appendChild(angleGroup);
+    }
+
     const supportsSegments = simObject.type === 'sphere' || simObject.type === 'twirl';
     let segmentsGroup: HTMLDivElement | undefined;
     let latInput: HTMLInputElement | undefined;
@@ -891,6 +960,8 @@ export function createPropertiesTab(app: App): HTMLElement {
       secondaryShadingValue,
       secondaryOpacitySlider,
       secondaryOpacityValue,
+      twirl8WidthInput,
+      twirl8AngleInput,
     };
   };
 
@@ -954,6 +1025,34 @@ export function createPropertiesTab(app: App): HTMLElement {
       } else if (simObject.type === 'sphere' || simObject.type === 'twirl') {
         controls.opacitySlider.value = simObject.opacity.toFixed(2);
         controls.opacityValue.textContent = simObject.opacity.toFixed(2);
+      } else if (simObject.type === 'twirl8') {
+        controls.opacitySlider.value = simObject.opacity.toFixed(2);
+        controls.opacityValue.textContent = simObject.opacity.toFixed(2);
+      }
+    }
+
+    if (controls.twirl8WidthInput) {
+      if (simObject.type === 'twirl8') {
+        controls.twirl8WidthInput.value = simObject.width.toFixed(2);
+        controls.twirl8WidthInput.dataset.prev = controls.twirl8WidthInput.value;
+        controls.twirl8WidthInput.disabled = false;
+      } else {
+        controls.twirl8WidthInput.value = '1.00';
+        controls.twirl8WidthInput.dataset.prev = controls.twirl8WidthInput.value;
+        controls.twirl8WidthInput.disabled = true;
+      }
+    }
+
+    if (controls.twirl8AngleInput) {
+      if (simObject.type === 'twirl8') {
+        const angleDeg = simObject.lobeAngle * RAD_TO_DEG;
+        controls.twirl8AngleInput.value = angleDeg.toFixed(1);
+        controls.twirl8AngleInput.dataset.prev = controls.twirl8AngleInput.value;
+        controls.twirl8AngleInput.disabled = false;
+      } else {
+        controls.twirl8AngleInput.value = '0.0';
+        controls.twirl8AngleInput.dataset.prev = controls.twirl8AngleInput.value;
+        controls.twirl8AngleInput.disabled = true;
       }
     }
 
