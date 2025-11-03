@@ -40,6 +40,11 @@ import {
   useK1P2Program,
   setK1P2SharedUniforms,
   drawK1P2,
+  createK1P2OutlineProgram,
+  disposeK1P2OutlineProgram,
+  useK1P2OutlineProgram,
+  setK1P2OutlineSharedUniforms,
+  drawK1P2Outline,
 } from './assets/K1P2Asset';
 
 export const Assets = {
@@ -74,6 +79,11 @@ export const Assets = {
   useTwirl8Program: useK1P2Program,
   setTwirl8SharedUniforms: setK1P2SharedUniforms,
   drawTwirl8: drawK1P2,
+  createTwirl8OutlineProgram: createK1P2OutlineProgram,
+  disposeTwirl8OutlineProgram: disposeK1P2OutlineProgram,
+  useTwirl8OutlineProgram: useK1P2OutlineProgram,
+  setTwirl8OutlineSharedUniforms: setK1P2OutlineSharedUniforms,
+  drawTwirl8Outline: drawK1P2Outline,
 };
 
 export type {
@@ -101,4 +111,5 @@ export type {
   K1P2Mesh as Twirl8Mesh,
   K1P2Program as Twirl8Program,
   K1P2SharedUniforms as Twirl8SharedUniforms,
+  K1P2OutlineProgram as Twirl8OutlineProgram,
 } from './assets/K1P2Asset';

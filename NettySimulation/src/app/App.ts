@@ -12,6 +12,7 @@ import {
   type TwirlingAxisMesh,
   type Twirl8Mesh,
   type Twirl8Program,
+  type Twirl8OutlineProgram,
 } from '../engine/Assets';
 import { buildAllSegments, type SimulationSegmentDefinition } from '../segments';
 import { AXIS_COLORS } from '../engine/assets/axisAsset';
@@ -279,6 +280,7 @@ export class App {
   private twirlMesh: TwirlMesh | null = null;
   private twirlingAxisMesh: TwirlingAxisMesh | null = null;
   private twirl8Program: Twirl8Program | null = null;
+  private twirl8OutlineProgram: Twirl8OutlineProgram | null = null;
   private twirl8Mesh: Twirl8Mesh | null = null;
   private axes: AxisSet | null = null;
   private rotatedAxes: AxisSet | null = null;
@@ -395,6 +397,7 @@ export class App {
     const axisProgram = Assets.createAxisProgram(gl);
     const twirlProgram = Assets.createTwirlProgram(gl);
     const twirl8Program = Assets.createTwirl8Program(gl);
+    const twirl8OutlineProgram = Assets.createTwirl8OutlineProgram(gl);
     const sphere = Assets.createSphereMesh(gl, this.sphereSegments.lat, this.sphereSegments.lon);
     const twirl8 = Assets.createTwirl8Mesh(gl);
     const twirl = Assets.createTwirlMesh(
@@ -417,6 +420,7 @@ export class App {
     this.axisProgram = axisProgram;
     this.twirlProgram = twirlProgram;
     this.twirl8Program = twirl8Program;
+    this.twirl8OutlineProgram = twirl8OutlineProgram;
     this.sphereMesh = sphere;
     this.twirl8Mesh = twirl8;
     this.twirlMesh = twirl;
@@ -511,6 +515,9 @@ export class App {
     if (this.gl && this.twirl8Program) {
       Assets.disposeTwirl8Program(this.gl, this.twirl8Program);
     }
+    if (this.gl && this.twirl8OutlineProgram) {
+      Assets.disposeTwirl8OutlineProgram(this.gl, this.twirl8OutlineProgram);
+    }
 
     this.canvas = null;
     this.gl = null;
@@ -518,6 +525,7 @@ export class App {
     this.axisProgram = null;
     this.twirlProgram = null;
     this.twirl8Program = null;
+    this.twirl8OutlineProgram = null;
     this.sphereMesh = null;
     this.twirlMesh = null;
     this.twirl8Mesh = null;
@@ -752,7 +760,7 @@ export class App {
 
     this.drawGhostParticles(gl, sphereProgram);
 
-    if (twirl8Queue.length > 0 && this.twirl8Program && this.twirl8Mesh) {
+    if (twirl8Queue.length > 0 && this.twirl8Program && this.twirl8OutlineProgram && this.twirl8Mesh) {
       Assets.useTwirl8Program(gl, this.twirl8Program);
       Assets.setTwirl8SharedUniforms(gl, this.twirl8Program, {
         viewMatrix: this.viewMatrix,
@@ -760,6 +768,13 @@ export class App {
       });
       gl.enable(gl.BLEND);
       gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+
+      const outlineParams: Array<{
+        modelMatrix: Float32Array;
+        width: number;
+        lobeRotation: number;
+        outlineColor: Float32Array;
+      }> = [];
 
       for (const ring of twirl8Queue) {
         const normalizedRotation = ((ring.rotationY / (Math.PI * 2)) % 1 + 1) % 1;
@@ -776,12 +791,40 @@ export class App {
         const effectiveRadius = Math.max(0.01, ring.radius * radiusFactor);
         const modelMatrix = this.buildTwirl8ModelMatrix(ring.axis, effectiveRadius, ring.rotationY);
         const colorVec = this.getBaseColorVector(ring.color, ring.opacity);
+        const widthValue = Math.max(0.05, ring.width * widthFactor);
         Assets.drawTwirl8(gl, this.twirl8Program, this.twirl8Mesh, {
           modelMatrix,
           color: colorVec,
-          width: Math.max(0.05, ring.width * widthFactor),
+          width: widthValue,
           lobeRotation: dynamicLobeAngle,
         });
+
+        const outlineColor = new Float32Array([0, 0, 0, 1]);
+        outlineParams.push({
+          modelMatrix,
+          width: widthValue,
+          lobeRotation: dynamicLobeAngle,
+          outlineColor,
+        });
+      }
+
+      Assets.useTwirl8OutlineProgram(gl, this.twirl8OutlineProgram);
+      Assets.setTwirl8OutlineSharedUniforms(gl, this.twirl8OutlineProgram, {
+        viewMatrix: this.viewMatrix,
+        projectionMatrix: this.projectionMatrix,
+      });
+
+      for (const paramsOutline of outlineParams) {
+        const outlineScales = [1.006, 0.994];
+        for (const scale of outlineScales) {
+          const scaledWidth = Math.max(0.01, paramsOutline.width * scale);
+          Assets.drawTwirl8Outline(gl, this.twirl8OutlineProgram, this.twirl8Mesh, {
+            modelMatrix: paramsOutline.modelMatrix,
+            color: paramsOutline.outlineColor,
+            width: scaledWidth,
+            lobeRotation: paramsOutline.lobeRotation,
+          });
+        }
       }
 
       gl.disable(gl.BLEND);
