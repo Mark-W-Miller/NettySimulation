@@ -353,7 +353,7 @@ export class App {
   }
 
   private buildTwirl8ModelMatrix(axis: 'x' | 'y' | 'z', radius: number, spin: number): Float32Array {
-    const norm = Math.max(0.01, radius / this.defaultShellSize);
+    const norm = Math.max(0, radius / this.defaultShellSize);
     let rotation = this.identityModelMatrix;
     switch (axis) {
       case 'x':
@@ -653,8 +653,8 @@ export class App {
           const previousRotation = simObject.rotationY;
           simObject.rotationY += beats * this.rotationPerBeat * simObject.speedPerTick * simObject.direction;
           const cycle = Math.PI * 2;
-          const previousTurns = Math.floor(previousRotation / cycle);
-          const currentTurns = Math.floor(simObject.rotationY / cycle);
+          const previousTurns = Math.trunc(previousRotation / cycle);
+          const currentTurns = Math.trunc(simObject.rotationY / cycle);
           const turnDelta = currentTurns - previousTurns;
           if (turnDelta !== 0) {
             const flips = Math.abs(turnDelta);
@@ -808,15 +808,15 @@ export class App {
             ? normalizedRotation * 2
             : (1 - normalizedRotation) * 2;
 
-        const radiusFactor = 0.2 + 0.8 * pulse;
-        const widthFactor = 0.3 + 0.7 * pulse;
+        const radiusFactor = pulse;
+        const widthFactor = pulse;
         const dynamicLobeAngle = ring.lobeAngle * ring.lobeOrientation;
 
-        const effectiveRadius = Math.max(0.01, ring.radius * radiusFactor);
+        const effectiveRadius = Math.max(0, ring.radius * radiusFactor);
         const modelMatrix = this.buildTwirl8ModelMatrix(ring.axis, effectiveRadius, ring.rotationY);
         const colorVec = this.getBaseColorVector(ring.color, ring.opacity);
-        const sizeValue = Math.max(0.05, ring.size * widthFactor);
-        const widthValue = Math.max(0.01, ring.width * widthFactor);
+        const sizeValue = Math.max(0, ring.size * widthFactor);
+        const widthValue = Math.max(0, ring.width * widthFactor);
         Assets.drawTwirl8(gl, this.twirl8Program, this.twirl8Mesh, {
           modelMatrix,
           color: colorVec,
@@ -844,8 +844,8 @@ export class App {
       for (const paramsOutline of outlineParams) {
         const outlineScales = [1.006, 0.994];
         for (const scale of outlineScales) {
-          const scaledSize = Math.max(0.01, paramsOutline.size * scale);
-          const scaledLobeWidth = Math.max(0.005, paramsOutline.lobeWidth * scale);
+          const scaledSize = Math.max(0, paramsOutline.size * scale);
+          const scaledLobeWidth = Math.max(0, paramsOutline.lobeWidth * scale);
           Assets.drawTwirl8Outline(gl, this.twirl8OutlineProgram, this.twirl8Mesh, {
             modelMatrix: paramsOutline.modelMatrix,
             color: paramsOutline.outlineColor,
