@@ -15,7 +15,7 @@ import {
   type Twirl8OutlineProgram,
 } from '../engine/Assets';
 import { buildAllSegments, type SimulationSegmentDefinition } from '../segments';
-import { AXIS_COLORS } from '../engine/assets/axisAsset';
+import { AXIS_COLORS, DEFAULT_AXIS_LENGTH } from '../engine/assets/axisAsset';
 import {
   TWIRLING_AXIS_BASE_LENGTH,
   TWIRLING_AXIS_BASE_RADIUS,
@@ -31,7 +31,7 @@ import {
   type Twirl8ObjectDefinition,
   type SimObjectDefinition,
 } from '../engine/assets/simTypes';
-import { CameraController } from './camera';
+import { CameraController, type CameraClickInfo } from './camera';
 import {
   clamp,
   mat3FromMat4,
@@ -464,6 +464,8 @@ export class App {
     this.resizeObserver.observe(container);
 
     this.cleanupCallbacks.push(this.camera.attach(container));
+    this.camera.setClickCallback((info) => this.handleCameraClick(info));
+    this.cleanupCallbacks.push(() => this.camera.setClickCallback(null));
 
     this.lastRenderTime = performance.now();
     const renderLoop = (now: number) => {
@@ -1147,6 +1149,96 @@ export class App {
     }
     return this.twirlingAxisMesh;
   }
+
+  private handleCameraClick({ x, y, container }: CameraClickInfo): void {
+    if (this.selectedSegmentId !== 'RGP_Pray') {
+      return;
+    }
+
+    const rect = container.getBoundingClientRect();
+    const width = rect.width;
+    const height = rect.height;
+    if (width <= 0 || height <= 0) {
+      return;
+    }
+
+    const localX = x - rect.left;
+    const localY = y - rect.top;
+    const axisLength = DEFAULT_AXIS_LENGTH * 0.5;
+    const candidates: Array<[number, number, number]> = [
+      [1, 0, 0],
+      [-1, 0, 0],
+      [0, 1, 0],
+      [0, -1, 0],
+      [0, 0, 1],
+      [0, 0, -1],
+    ];
+
+    let bestAxis: [number, number, number] | null = null;
+    let bestDistance = Number.POSITIVE_INFINITY;
+
+    for (const axis of candidates) {
+      const point: [number, number, number] = [
+        axis[0] * axisLength,
+        axis[1] * axisLength,
+        axis[2] * axisLength,
+      ];
+      const projection = this.projectPointToScreen(point, width, height);
+      if (!projection || !projection.visible) {
+        continue;
+      }
+      const dx = projection.x - localX;
+      const dy = projection.y - localY;
+      const distance = Math.hypot(dx, dy);
+      if (distance < bestDistance) {
+        bestDistance = distance;
+        bestAxis = axis;
+      }
+    }
+
+    if (!bestAxis) {
+      return;
+    }
+
+    const threshold = Math.max(width, height) * 0.08;
+    if (bestDistance <= threshold) {
+      this.camera.lookAtAxis(bestAxis);
+    }
+  }
+
+  private projectPointToScreen(
+    point: [number, number, number],
+    width: number,
+    height: number,
+  ): { x: number; y: number; visible: boolean } | null {
+    const viewVec = this.multiplyMat4Vec(this.viewMatrix, [point[0], point[1], point[2], 1]);
+    const clipVec = this.multiplyMat4Vec(this.projectionMatrix, viewVec);
+    const w = clipVec[3];
+    if (Math.abs(w) < 1e-6) {
+      return null;
+    }
+    const ndcX = clipVec[0] / w;
+    const ndcY = clipVec[1] / w;
+    const ndcZ = clipVec[2] / w;
+    const visible = ndcZ >= -1 && ndcZ <= 1;
+    const screenX = (ndcX * 0.5 + 0.5) * width;
+    const screenY = (1 - (ndcY * 0.5 + 0.5)) * height;
+    return { x: screenX, y: screenY, visible };
+  }
+
+  private multiplyMat4Vec(
+    matrix: Float32Array,
+    vector: [number, number, number, number],
+  ): [number, number, number, number] {
+    const [x, y, z, w] = vector;
+    return [
+      matrix[0] * x + matrix[4] * y + matrix[8] * z + matrix[12] * w,
+      matrix[1] * x + matrix[5] * y + matrix[9] * z + matrix[13] * w,
+      matrix[2] * x + matrix[6] * y + matrix[10] * z + matrix[14] * w,
+      matrix[3] * x + matrix[7] * y + matrix[11] * z + matrix[15] * w,
+    ];
+  }
+
 
   private drawAxisSet(
     gl: WebGLRenderingContext,

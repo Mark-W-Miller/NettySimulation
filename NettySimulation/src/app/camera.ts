@@ -10,6 +10,11 @@ import {
 } from './math3d';
 
 type DragMode = 'orbit' | 'pan' | null;
+export interface CameraClickInfo {
+  x: number;
+  y: number;
+  container: HTMLDivElement;
+}
 
 export interface CameraState {
   azimuth: number;
@@ -53,6 +58,7 @@ export class CameraController {
   private dragMode: DragMode = null;
   private activePointerId: number | null = null;
   private lockToOrigin = false;
+  private clickCallback: ((info: CameraClickInfo) => void) | null = null;
   private dragStart: DragSnapshot = {
     x: 0,
     y: 0,
@@ -64,6 +70,10 @@ export class CameraController {
   };
 
   constructor(private readonly onChange: () => void = () => {}) {}
+
+  setClickCallback(callback: ((info: CameraClickInfo) => void) | null): void {
+    this.clickCallback = callback;
+  }
 
   setLockToOrigin(locked: boolean): void {
     if (this.lockToOrigin === locked) {
@@ -80,6 +90,13 @@ export class CameraController {
 
   attach(container: HTMLDivElement): () => void {
     const pointerDown = (event: PointerEvent) => {
+      if (event.button === 0 && event.detail >= 2 && this.lockToOrigin) {
+        if (this.clickCallback) {
+          this.clickCallback({ x: event.clientX, y: event.clientY, container });
+        }
+        return;
+      }
+
       let mode: DragMode = null;
 
       if (event.button === 0 && event.altKey) {
@@ -159,9 +176,13 @@ export class CameraController {
         if (this.dragMode === 'orbit' && this.lockToOrigin) {
           const dx = event.clientX - this.dragStart.x;
           const dy = event.clientY - this.dragStart.y;
-          const snapped = this.trySnapToAxis(event.clientX, event.clientY, Math.max(Math.abs(dx), Math.abs(dy)));
-          if (snapped) {
-            this.onChange();
+          const dragMagnitude = Math.max(Math.abs(dx), Math.abs(dy));
+          const snapDragThreshold = 6;
+          if (dragMagnitude >= snapDragThreshold) {
+            const snapped = this.trySnapToAxis(event.clientX, event.clientY, dragMagnitude);
+            if (snapped) {
+              this.onChange();
+            }
           }
         }
 
@@ -275,6 +296,20 @@ export class CameraController {
     }
     this.state.azimuth = this.normalizeAngle(desiredAzimuth);
     this.state.elevation = desiredElevation;
+  }
+
+  lookAtAxis(axis: [number, number, number]): void {
+    const desiredElevationRaw = Math.asin(-axis[1]);
+    const clampLimit = Math.PI / 2 - 1e-4;
+    const desiredElevation = clamp(desiredElevationRaw, -clampLimit, clampLimit);
+    const cosElevation = Math.cos(desiredElevation);
+    let desiredAzimuth = this.state.azimuth;
+    if (Math.abs(cosElevation) >= 1e-5) {
+      desiredAzimuth = Math.atan2(-axis[0], -axis[2]);
+    }
+    this.state.azimuth = this.normalizeAngle(desiredAzimuth);
+    this.state.elevation = desiredElevation;
+    this.onChange();
   }
 
   private normalizeAngle(angle: number): number {
