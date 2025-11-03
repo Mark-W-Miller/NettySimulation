@@ -320,7 +320,7 @@ export function createK1P2Program(gl: WebGLRenderingContext): K1P2Program {
       pos.y *= uLobeWidth;
 
       float angle = uLobeRotation * aLobeSign;
-      vec3 axis = normalize(vec3(pos.xy, 0.0));
+      vec3 axis = vec3(1.0, 0.0, 0.0);
       if (length(axis) > 0.0001) {
         pos = rotateAroundAxis(pos, axis, angle);
         normal = rotateAroundAxis(normal, axis, angle);
@@ -474,7 +474,7 @@ export function createK1P2OutlineProgram(gl: WebGLRenderingContext): K1P2Outline
       pos.y *= uLobeWidth;
 
       float angle = uLobeRotation * aLobeSign;
-      vec3 axis = normalize(vec3(pos.xy, 0.0));
+      vec3 axis = vec3(1.0, 0.0, 0.0);
       if (length(axis) > 0.0001) {
         pos = rotateAroundAxis(pos, axis, angle);
       }
