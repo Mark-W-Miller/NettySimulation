@@ -5,7 +5,7 @@ This repository contains a self-contained copy of the Netty Simulation Babylon.j
 ## Requirements
 
 - Node.js 18 or newer
-Hello
+Hello Goodbye
 ## Project Layout
 
 ```
