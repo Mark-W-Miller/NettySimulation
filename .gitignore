@@ -1,15 +1,30 @@
-# Node / Vite artifacts
-NettySimulation/node_modules/
-NettySimulation/dist/
+# --- dependencies ---
+node_modules/
 
-# Logs
-NettySimulation/.assistant.log
-NettySimulation/npm-debug.log*
-NettySimulation/yarn-debug.log*
-NettySimulation/yarn-error.log*
-NettySimulation/pnpm-debug.log*
-NettySimulation/.npm/_logs/
+# --- builds / caches ---
+dist/
+dist-8/
+build/
+out/
+.vite/
+coverage/
 
-# OS cruft
+# --- logs ---
+*.log
+npm-debug.log*
+yarn-debug.log*
+pnpm-debug.log*
+.assistant.log
+.npm/_logs/
+
+# --- env/config (if you use them) ---
+.env
+.env.*
+
+# --- OS / editors ---
 .DS_Store
 Thumbs.db
+*.swp
+*.swo
+.idea/
+.vscode/
