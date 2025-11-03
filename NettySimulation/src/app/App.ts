@@ -240,6 +240,7 @@ interface Twirl8Object {
   size: number;
   width: number;
   lobeAngle: number;
+  lobeOrientation: 1 | -1;
   rotationY: number;
   speedPerTick: number;
   direction: 1 | -1;
@@ -649,7 +650,18 @@ export class App {
 
       if (simObject.type === 'twirl8') {
         if (beats > 0) {
+          const previousRotation = simObject.rotationY;
           simObject.rotationY += beats * this.rotationPerBeat * simObject.speedPerTick * simObject.direction;
+          const cycle = Math.PI * 2;
+          const previousTurns = Math.floor(previousRotation / cycle);
+          const currentTurns = Math.floor(simObject.rotationY / cycle);
+          const turnDelta = currentTurns - previousTurns;
+          if (turnDelta !== 0) {
+            const flips = Math.abs(turnDelta);
+            if (flips % 2 === 1) {
+              simObject.lobeOrientation = simObject.lobeOrientation === 1 ? -1 : 1;
+            }
+          }
         }
         twirl8Queue.push(simObject);
         continue;
@@ -798,8 +810,7 @@ export class App {
 
         const radiusFactor = 0.2 + 0.8 * pulse;
         const widthFactor = 0.3 + 0.7 * pulse;
-        const spinFlip = pulse < 0.3 ? -1 : 1;
-        const dynamicLobeAngle = ring.lobeAngle * spinFlip;
+        const dynamicLobeAngle = ring.lobeAngle * ring.lobeOrientation;
 
         const effectiveRadius = Math.max(0.01, ring.radius * radiusFactor);
         const modelMatrix = this.buildTwirl8ModelMatrix(ring.axis, effectiveRadius, ring.rotationY);
@@ -1045,6 +1056,7 @@ export class App {
           size,
           width: lobeWidth,
           lobeAngle,
+          lobeOrientation: 1,
           rotationY: (def.initialRotationDeg ?? 0) * DEG_TO_RAD,
           speedPerTick: Math.max(0.1, def.speedPerTick ?? 1),
           direction: def.direction ?? 1,
