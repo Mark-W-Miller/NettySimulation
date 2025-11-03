@@ -207,6 +207,7 @@ interface K1P2AssetConfig extends Record<string, unknown> {
   color: BaseColor;
   opacity: number;
   visible: boolean;
+  size: number;
   width: number;
   lobeRotationDeg: number;
   speedPerTick: number;
@@ -220,6 +221,7 @@ const k1p2Defaults: K1P2AssetConfig = {
   color: 'white',
   opacity: 0.85,
   visible: true,
+  size: 0.3,
   width: 0.3,
   lobeRotationDeg: 20,
   speedPerTick: 1,
@@ -233,6 +235,8 @@ const k1p2Asset: AssetDefinition<K1P2AssetConfig> = {
   defaultConfig: k1p2Defaults,
   build: ({ instanceId, config }) => {
     const merged = mergeConfig(k1p2Defaults, config);
+    const size = Math.max(0.1, typeof merged.size === 'number' ? merged.size : merged.width);
+    const width = Math.max(0.01, typeof merged.width === 'number' ? merged.width : size);
     const definition: Twirl8ObjectDefinition = {
       type: 'twirl8',
       id: instanceId,
@@ -241,7 +245,8 @@ const k1p2Asset: AssetDefinition<K1P2AssetConfig> = {
       color: merged.color,
       opacity: merged.opacity,
       visible: merged.visible,
-      width: merged.width,
+      size,
+      width,
       lobeRotationDeg: merged.lobeRotationDeg,
       speedPerTick: merged.speedPerTick,
       direction: merged.direction,

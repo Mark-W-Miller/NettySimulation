@@ -73,6 +73,7 @@ export interface Twirl8ObjectDefinition {
   color: BaseColor;
   opacity?: number;
   visible?: boolean;
+  size?: number;
   width?: number;
   lobeRotationDeg?: number;
   speedPerTick?: number;

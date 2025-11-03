@@ -237,6 +237,7 @@ interface Twirl8Object {
   color: BaseColor;
   opacity: number;
   visible: boolean;
+  size: number;
   width: number;
   lobeAngle: number;
   rotationY: number;
@@ -266,11 +267,21 @@ type SimObjectUpdatePayload = Partial<{
   beltHalfAngle: number;
   pulseSpeed: number;
   sphereOpacity: number;
+  twirl8Size: number;
   twirl8Width: number;
   twirl8AngleDeg: number;
 }>;
 
+interface StoredDisplaySettings {
+  axisVisibility: Record<'x' | 'y' | 'z', boolean>;
+  showSecondaryAxes: boolean;
+  axisOpacity: number;
+  axisRadiusScale: number;
+}
+
 export class App {
+  private static readonly DISPLAY_SETTINGS_STORAGE_KEY = 'nettysimulation.displaySettings.v1';
+
   private canvas: HTMLCanvasElement | null = null;
   private gl: WebGLRenderingContext | null = null;
   private sphereProgram: SphereProgram | null = null;
@@ -337,6 +348,7 @@ export class App {
     const rotateX = mat4FromXRotation(Math.PI / 4);
     this.rotatedAxisModelMatrix = mat4Multiply(rotateX, rotateY);
     this.rotatedAxisNormalMatrix = mat3FromMat4(this.rotatedAxisModelMatrix);
+    this.restoreDisplaySettings();
   }
 
   private buildTwirl8ModelMatrix(axis: 'x' | 'y' | 'z', radius: number, spin: number): Float32Array {
@@ -771,7 +783,8 @@ export class App {
 
       const outlineParams: Array<{
         modelMatrix: Float32Array;
-        width: number;
+        size: number;
+        lobeWidth: number;
         lobeRotation: number;
         outlineColor: Float32Array;
       }> = [];
@@ -791,18 +804,21 @@ export class App {
         const effectiveRadius = Math.max(0.01, ring.radius * radiusFactor);
         const modelMatrix = this.buildTwirl8ModelMatrix(ring.axis, effectiveRadius, ring.rotationY);
         const colorVec = this.getBaseColorVector(ring.color, ring.opacity);
-        const widthValue = Math.max(0.05, ring.width * widthFactor);
+        const sizeValue = Math.max(0.05, ring.size * widthFactor);
+        const widthValue = Math.max(0.01, ring.width * widthFactor);
         Assets.drawTwirl8(gl, this.twirl8Program, this.twirl8Mesh, {
           modelMatrix,
           color: colorVec,
-          width: widthValue,
+          size: sizeValue,
+          lobeWidth: widthValue,
           lobeRotation: dynamicLobeAngle,
         });
 
         const outlineColor = new Float32Array([0, 0, 0, 1]);
         outlineParams.push({
           modelMatrix,
-          width: widthValue,
+          size: sizeValue,
+          lobeWidth: widthValue,
           lobeRotation: dynamicLobeAngle,
           outlineColor,
         });
@@ -817,11 +833,13 @@ export class App {
       for (const paramsOutline of outlineParams) {
         const outlineScales = [1.006, 0.994];
         for (const scale of outlineScales) {
-          const scaledWidth = Math.max(0.01, paramsOutline.width * scale);
+          const scaledSize = Math.max(0.01, paramsOutline.size * scale);
+          const scaledLobeWidth = Math.max(0.005, paramsOutline.lobeWidth * scale);
           Assets.drawTwirl8Outline(gl, this.twirl8OutlineProgram, this.twirl8Mesh, {
             modelMatrix: paramsOutline.modelMatrix,
             color: paramsOutline.outlineColor,
-            width: scaledWidth,
+            size: scaledSize,
+            lobeWidth: scaledLobeWidth,
             lobeRotation: paramsOutline.lobeRotation,
           });
         }
@@ -1006,7 +1024,15 @@ export class App {
         this.updateDexelAssetPosition(dexelObject);
       } else if (objectDef.type === 'twirl8') {
         const def = objectDef as Twirl8ObjectDefinition;
-        const width = Math.max(0.1, def.width ?? 1);
+        const hasExplicitSize = typeof def.size === 'number' && Number.isFinite(def.size);
+        const rawSize = hasExplicitSize ? def.size : def.width;
+        const size = Math.max(0.1, rawSize ?? 1);
+        let lobeWidth: number;
+        if (hasExplicitSize) {
+          lobeWidth = Math.max(0.01, def.width ?? size);
+        } else {
+          lobeWidth = Math.max(0.01, size);
+        }
         const lobeAngle = (def.lobeRotationDeg ?? 20) * DEG_TO_RAD;
         this.simObjects.push({
           type: 'twirl8',
@@ -1016,7 +1042,8 @@ export class App {
           color: def.color,
           opacity: clamp(def.opacity ?? 1, 0, 1),
           visible: def.visible ?? true,
-          width,
+          size,
+          width: lobeWidth,
           lobeAngle,
           rotationY: (def.initialRotationDeg ?? 0) * DEG_TO_RAD,
           speedPerTick: Math.max(0.1, def.speedPerTick ?? 1),
@@ -1326,8 +1353,11 @@ export class App {
         this.updateDexelAssetPosition(selected);
       }
     } else if (selected.type === 'twirl8') {
+      if (typeof update.twirl8Size === 'number' && Number.isFinite(update.twirl8Size)) {
+        selected.size = Math.max(0.1, update.twirl8Size);
+      }
       if (typeof update.twirl8Width === 'number' && Number.isFinite(update.twirl8Width)) {
-        selected.width = Math.max(0.1, update.twirl8Width);
+        selected.width = Math.max(0.01, update.twirl8Width);
       }
       if (typeof update.twirl8AngleDeg === 'number' && Number.isFinite(update.twirl8AngleDeg)) {
         selected.lobeAngle = update.twirl8AngleDeg * DEG_TO_RAD;
@@ -2037,6 +2067,7 @@ export class App {
       return;
     }
     this.axisVisibility[axis] = visible;
+    this.persistDisplaySettings();
     this.notifySimChange();
   }
 
@@ -2050,6 +2081,7 @@ export class App {
       return;
     }
     this.axisOpacitySlider = clamped;
+    this.persistDisplaySettings();
     this.notifySimChange();
   }
 
@@ -2067,6 +2099,7 @@ export class App {
     }
     this.axisRadiusScale = clamped;
     this.rebuildAxisMeshes();
+    this.persistDisplaySettings();
     this.notifySimChange();
   }
 
@@ -2095,6 +2128,57 @@ export class App {
     return DEFAULT_TWIRLING_AXIS_SCRIPT;
   }
 
+  private restoreDisplaySettings(): void {
+    if (typeof window === 'undefined') {
+      return;
+    }
+    try {
+      const stored = window.localStorage?.getItem(App.DISPLAY_SETTINGS_STORAGE_KEY);
+      if (!stored) {
+        return;
+      }
+      const parsed = JSON.parse(stored) as Partial<StoredDisplaySettings> | null;
+      if (!parsed) {
+        return;
+      }
+      if (parsed.axisVisibility) {
+        this.axisVisibility = {
+          x: Boolean(parsed.axisVisibility.x),
+          y: Boolean(parsed.axisVisibility.y),
+          z: Boolean(parsed.axisVisibility.z),
+        };
+      }
+      if (typeof parsed.showSecondaryAxes === 'boolean') {
+        this.showSecondaryAxes = parsed.showSecondaryAxes;
+      }
+      if (typeof parsed.axisOpacity === 'number' && Number.isFinite(parsed.axisOpacity)) {
+        this.axisOpacitySlider = clamp(parsed.axisOpacity, 0, 1);
+      }
+      if (typeof parsed.axisRadiusScale === 'number' && Number.isFinite(parsed.axisRadiusScale)) {
+        this.axisRadiusScale = Math.max(1, Math.floor(parsed.axisRadiusScale));
+      }
+    } catch {
+      // Ignore malformed storage data.
+    }
+  }
+
+  private persistDisplaySettings(): void {
+    if (typeof window === 'undefined' || !window.localStorage) {
+      return;
+    }
+    const payload: StoredDisplaySettings = {
+      axisVisibility: { ...this.axisVisibility },
+      showSecondaryAxes: this.showSecondaryAxes,
+      axisOpacity: this.axisOpacitySlider,
+      axisRadiusScale: this.axisRadiusScale,
+    };
+    try {
+      window.localStorage.setItem(App.DISPLAY_SETTINGS_STORAGE_KEY, JSON.stringify(payload));
+    } catch {
+      // Swallow storage errors (quota exceeded, disabled storage, etc.).
+    }
+  }
+
   getTwirlingAxisScriptPresets(): ReadonlyArray<{ label: string; script: string }> {
     return SCRIPT_PRESETS;
   }
@@ -2116,6 +2200,7 @@ export class App {
       return;
     }
     this.showSecondaryAxes = visible;
+    this.persistDisplaySettings();
     this.notifySimChange();
   }
 

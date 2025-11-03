@@ -71,6 +71,7 @@ export function createPropertiesTab(app: App): HTMLElement {
     sizeInput?: HTMLInputElement;
     scriptInput?: HTMLInputElement;
     scriptSelect?: HTMLSelectElement;
+    twirl8SizeInput?: HTMLInputElement;
     twirl8WidthInput?: HTMLInputElement;
     twirl8AngleInput?: HTMLInputElement;
   };
@@ -285,6 +286,7 @@ export function createPropertiesTab(app: App): HTMLElement {
     let secondaryShadingValue: HTMLSpanElement | undefined;
     let secondaryOpacitySlider: HTMLInputElement | undefined;
     let secondaryOpacityValue: HTMLSpanElement | undefined;
+    let twirl8SizeInput: HTMLInputElement | undefined;
     let twirl8WidthInput: HTMLInputElement | undefined;
     let twirl8AngleInput: HTMLInputElement | undefined;
 
@@ -778,16 +780,44 @@ export function createPropertiesTab(app: App): HTMLElement {
     }
 
     if (simObject.type === 'twirl8') {
+      const sizeGroup = document.createElement('div');
+      sizeGroup.className = 'properties-group';
+      const sizeLabel = document.createElement('label');
+      sizeLabel.className = 'properties-label';
+      sizeLabel.textContent = 'Size';
+      sizeLabel.htmlFor = `properties-twirl8-size-${simObject.id}`;
+      twirl8SizeInput = document.createElement('input');
+      twirl8SizeInput.type = 'number';
+      twirl8SizeInput.id = `properties-twirl8-size-${simObject.id}`;
+      twirl8SizeInput.min = '0.1';
+      twirl8SizeInput.step = '0.05';
+      twirl8SizeInput.className = 'properties-number properties-number--compact';
+      twirl8SizeInput.value = simObject.size.toFixed(2);
+      twirl8SizeInput.dataset.prev = twirl8SizeInput.value;
+      twirl8SizeInput.addEventListener('change', () => {
+        if (!twirl8SizeInput) {
+          return;
+        }
+        const raw = Number.parseFloat(twirl8SizeInput.value);
+        const prev = Number.parseFloat(twirl8SizeInput.dataset.prev ?? '0.3');
+        const next = Number.isFinite(raw) ? Math.max(0.1, raw) : prev;
+        twirl8SizeInput.value = next.toFixed(2);
+        twirl8SizeInput.dataset.prev = twirl8SizeInput.value;
+        applyUpdate({ twirl8Size: next });
+      });
+      sizeGroup.appendChild(sizeLabel);
+      sizeGroup.appendChild(twirl8SizeInput);
+
       const widthGroup = document.createElement('div');
       widthGroup.className = 'properties-group';
       const widthLabel = document.createElement('label');
       widthLabel.className = 'properties-label';
-      widthLabel.textContent = 'Width Scale';
+      widthLabel.textContent = 'Width';
       widthLabel.htmlFor = `properties-twirl8-width-${simObject.id}`;
       twirl8WidthInput = document.createElement('input');
       twirl8WidthInput.type = 'number';
       twirl8WidthInput.id = `properties-twirl8-width-${simObject.id}`;
-      twirl8WidthInput.min = '0.1';
+      twirl8WidthInput.min = '0.01';
       twirl8WidthInput.step = '0.05';
       twirl8WidthInput.className = 'properties-number properties-number--compact';
       twirl8WidthInput.value = simObject.width.toFixed(2);
@@ -797,8 +827,8 @@ export function createPropertiesTab(app: App): HTMLElement {
           return;
         }
         const raw = Number.parseFloat(twirl8WidthInput.value);
-        const prev = Number.parseFloat(twirl8WidthInput.dataset.prev ?? '1');
-        const next = Number.isFinite(raw) ? Math.max(0.1, raw) : prev;
+        const prev = Number.parseFloat(twirl8WidthInput.dataset.prev ?? '0.3');
+        const next = Number.isFinite(raw) ? Math.max(0.01, raw) : prev;
         twirl8WidthInput.value = next.toFixed(2);
         twirl8WidthInput.dataset.prev = twirl8WidthInput.value;
         applyUpdate({ twirl8Width: next });
@@ -836,6 +866,7 @@ export function createPropertiesTab(app: App): HTMLElement {
       angleGroup.appendChild(angleLabel);
       angleGroup.appendChild(twirl8AngleInput);
 
+      form.appendChild(sizeGroup);
       form.appendChild(widthGroup);
       form.appendChild(angleGroup);
     }
@@ -960,6 +991,7 @@ export function createPropertiesTab(app: App): HTMLElement {
       secondaryShadingValue,
       secondaryOpacitySlider,
       secondaryOpacityValue,
+      twirl8SizeInput,
       twirl8WidthInput,
       twirl8AngleInput,
     };
@@ -1028,6 +1060,18 @@ export function createPropertiesTab(app: App): HTMLElement {
       } else if (simObject.type === 'twirl8') {
         controls.opacitySlider.value = simObject.opacity.toFixed(2);
         controls.opacityValue.textContent = simObject.opacity.toFixed(2);
+      }
+    }
+
+    if (controls.twirl8SizeInput) {
+      if (simObject.type === 'twirl8') {
+        controls.twirl8SizeInput.value = simObject.size.toFixed(2);
+        controls.twirl8SizeInput.dataset.prev = controls.twirl8SizeInput.value;
+        controls.twirl8SizeInput.disabled = false;
+      } else {
+        controls.twirl8SizeInput.value = '0.30';
+        controls.twirl8SizeInput.dataset.prev = controls.twirl8SizeInput.value;
+        controls.twirl8SizeInput.disabled = true;
       }
     }
 

@@ -13,6 +13,8 @@ export interface K1P2Mesh {
   interiorPositionBuffer: WebGLBuffer;
   interiorLobeSignBuffer: WebGLBuffer;
   interiorLineCount: number;
+  baseTipDistance: number;
+  baseLobeWidth: number;
 }
 
 export interface K1P2Program {
@@ -24,7 +26,8 @@ export interface K1P2Program {
   uniformView: WebGLUniformLocation;
   uniformProjection: WebGLUniformLocation;
   uniformColor: WebGLUniformLocation;
-  uniformWidth: WebGLUniformLocation;
+  uniformSize: WebGLUniformLocation;
+  uniformLobeWidth: WebGLUniformLocation;
   uniformLobeRotation: WebGLUniformLocation;
 }
 
@@ -36,7 +39,8 @@ export interface K1P2OutlineProgram {
   uniformView: WebGLUniformLocation;
   uniformProjection: WebGLUniformLocation;
   uniformColor: WebGLUniformLocation;
-  uniformWidth: WebGLUniformLocation;
+  uniformSize: WebGLUniformLocation;
+  uniformLobeWidth: WebGLUniformLocation;
   uniformLobeRotation: WebGLUniformLocation;
 }
 
@@ -48,7 +52,8 @@ export interface K1P2SharedUniforms {
 export interface K1P2DrawParams {
   modelMatrix: Float32Array;
   color: Float32Array; // vec4 RGBA
-  width: number;
+  size: number;
+  lobeWidth: number;
   lobeRotation: number;
 }
 
@@ -60,6 +65,9 @@ export function createK1P2Mesh(gl: WebGLRenderingContext, segments = 128): K1P2M
 
   const upperBoundary: Array<[number, number]> = [];
   const lowerBoundary: Array<[number, number]> = [];
+  let maxAbsX = 0;
+  let minY = Number.POSITIVE_INFINITY;
+  let maxY = Number.NEGATIVE_INFINITY;
 
   for (let i = 1; i < sampleCount; i += 1) {
     const t = (i / sampleCount) * Math.PI;
@@ -73,6 +81,9 @@ export function createK1P2Mesh(gl: WebGLRenderingContext, segments = 128): K1P2M
       continue;
     }
     upperBoundary.push([x, y]);
+    maxAbsX = Math.max(maxAbsX, Math.abs(x));
+    minY = Math.min(minY, y);
+    maxY = Math.max(maxY, y);
   }
 
   for (let i = sampleCount - 1; i > 0; i -= 1) {
@@ -87,6 +98,9 @@ export function createK1P2Mesh(gl: WebGLRenderingContext, segments = 128): K1P2M
       continue;
     }
     lowerBoundary.push([-x, -y]);
+    maxAbsX = Math.max(maxAbsX, Math.abs(x));
+    minY = Math.min(minY, -y);
+    maxY = Math.max(maxY, -y);
   }
 
   const positions: number[] = [];
@@ -99,6 +113,8 @@ export function createK1P2Mesh(gl: WebGLRenderingContext, segments = 128): K1P2M
   const outlineCounts: number[] = [];
   const interiorPositions: number[] = [];
   const interiorLobeSigns: number[] = [];
+  const baseTipDistance = Math.max(ORIGIN_EPSILON, maxAbsX);
+  const baseLobeWidth = Math.max(ORIGIN_EPSILON, maxY - minY);
 
   const addVertex = (x: number, y: number, z: number, lobe: 1 | -1) => {
     const index = positions.length / 3;
@@ -258,6 +274,8 @@ export function createK1P2Mesh(gl: WebGLRenderingContext, segments = 128): K1P2M
     interiorPositionBuffer,
     interiorLobeSignBuffer,
     interiorLineCount: interiorPositions.length / 6,
+    baseTipDistance,
+    baseLobeWidth,
   };
 }
 
@@ -282,7 +300,8 @@ export function createK1P2Program(gl: WebGLRenderingContext): K1P2Program {
     uniform mat4 uModelMatrix;
     uniform mat4 uViewMatrix;
     uniform mat4 uProjectionMatrix;
-    uniform float uWidth;
+    uniform float uSize;
+    uniform float uLobeWidth;
     uniform float uLobeRotation;
 
     varying vec3 vNormal;
@@ -297,10 +316,11 @@ export function createK1P2Program(gl: WebGLRenderingContext): K1P2Program {
       vec3 pos = aPosition;
       vec3 normal = aNormal;
 
-      pos.xy *= uWidth;
+      pos.x *= uSize;
+      pos.y *= uLobeWidth;
 
       float angle = uLobeRotation * aLobeSign;
-      vec3 axis = normalize(vec3(aPosition.xy, 0.0));
+      vec3 axis = normalize(vec3(pos.xy, 0.0));
       if (length(axis) > 0.0001) {
         pos = rotateAroundAxis(pos, axis, angle);
         normal = rotateAroundAxis(normal, axis, angle);
@@ -354,7 +374,8 @@ export function createK1P2Program(gl: WebGLRenderingContext): K1P2Program {
   const uniformView = getRequiredUniform(gl, program, 'uViewMatrix');
   const uniformProjection = getRequiredUniform(gl, program, 'uProjectionMatrix');
   const uniformColor = getRequiredUniform(gl, program, 'uColor');
-  const uniformWidth = getRequiredUniform(gl, program, 'uWidth');
+  const uniformSize = getRequiredUniform(gl, program, 'uSize');
+  const uniformLobeWidth = getRequiredUniform(gl, program, 'uLobeWidth');
   const uniformLobeRotation = getRequiredUniform(gl, program, 'uLobeRotation');
 
   return {
@@ -366,7 +387,8 @@ export function createK1P2Program(gl: WebGLRenderingContext): K1P2Program {
     uniformView,
     uniformProjection,
     uniformColor,
-    uniformWidth,
+    uniformSize,
+    uniformLobeWidth,
     uniformLobeRotation,
   };
 }
@@ -397,7 +419,12 @@ export function drawK1P2(
 ): void {
   gl.uniformMatrix4fv(program.uniformModel, false, params.modelMatrix);
   gl.uniform4fv(program.uniformColor, params.color);
-  gl.uniform1f(program.uniformWidth, params.width);
+  const sizeScale =
+    mesh.baseTipDistance > ORIGIN_EPSILON ? params.size / mesh.baseTipDistance : params.size;
+  const widthScale =
+    mesh.baseLobeWidth > ORIGIN_EPSILON ? params.lobeWidth / mesh.baseLobeWidth : params.lobeWidth;
+  gl.uniform1f(program.uniformSize, sizeScale);
+  gl.uniform1f(program.uniformLobeWidth, widthScale);
   gl.uniform1f(program.uniformLobeRotation, params.lobeRotation);
 
   gl.bindBuffer(gl.ARRAY_BUFFER, mesh.positionBuffer);
@@ -431,7 +458,8 @@ export function createK1P2OutlineProgram(gl: WebGLRenderingContext): K1P2Outline
     uniform mat4 uModelMatrix;
     uniform mat4 uViewMatrix;
     uniform mat4 uProjectionMatrix;
-    uniform float uWidth;
+    uniform float uSize;
+    uniform float uLobeWidth;
     uniform float uLobeRotation;
 
     vec3 rotateAroundAxis(vec3 v, vec3 axis, float angle) {
@@ -442,10 +470,11 @@ export function createK1P2OutlineProgram(gl: WebGLRenderingContext): K1P2Outline
 
     void main() {
       vec3 pos = aPosition;
-      pos.xy *= uWidth;
+      pos.x *= uSize;
+      pos.y *= uLobeWidth;
 
       float angle = uLobeRotation * aLobeSign;
-      vec3 axis = normalize(vec3(aPosition.xy, 0.0));
+      vec3 axis = normalize(vec3(pos.xy, 0.0));
       if (length(axis) > 0.0001) {
         pos = rotateAroundAxis(pos, axis, angle);
       }
@@ -488,7 +517,8 @@ export function createK1P2OutlineProgram(gl: WebGLRenderingContext): K1P2Outline
   const uniformView = getRequiredUniform(gl, program, 'uViewMatrix');
   const uniformProjection = getRequiredUniform(gl, program, 'uProjectionMatrix');
   const uniformColor = getRequiredUniform(gl, program, 'uColor');
-  const uniformWidth = getRequiredUniform(gl, program, 'uWidth');
+  const uniformSize = getRequiredUniform(gl, program, 'uSize');
+  const uniformLobeWidth = getRequiredUniform(gl, program, 'uLobeWidth');
   const uniformLobeRotation = getRequiredUniform(gl, program, 'uLobeRotation');
 
   return {
@@ -499,7 +529,8 @@ export function createK1P2OutlineProgram(gl: WebGLRenderingContext): K1P2Outline
     uniformView,
     uniformProjection,
     uniformColor,
-    uniformWidth,
+    uniformSize,
+    uniformLobeWidth,
     uniformLobeRotation,
   };
 }
@@ -533,7 +564,12 @@ export function drawK1P2Outline(
 ): void {
   gl.uniformMatrix4fv(program.uniformModel, false, params.modelMatrix);
   gl.uniform4fv(program.uniformColor, params.color);
-  gl.uniform1f(program.uniformWidth, params.width);
+  const sizeScale =
+    mesh.baseTipDistance > ORIGIN_EPSILON ? params.size / mesh.baseTipDistance : params.size;
+  const widthScale =
+    mesh.baseLobeWidth > ORIGIN_EPSILON ? params.lobeWidth / mesh.baseLobeWidth : params.lobeWidth;
+  gl.uniform1f(program.uniformSize, sizeScale);
+  gl.uniform1f(program.uniformLobeWidth, widthScale);
   gl.uniform1f(program.uniformLobeRotation, params.lobeRotation);
 
   gl.bindBuffer(gl.ARRAY_BUFFER, mesh.outlinePositionBuffer);
