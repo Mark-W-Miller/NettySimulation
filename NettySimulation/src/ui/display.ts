@@ -1,5 +1,6 @@
 // display.ts — builds the Display tab UI for scene visibility controls
 import { App } from '../app/App';
+import { showLogWindow } from './logWindow';
 
 type AxisKey = 'x' | 'y' | 'z';
 
@@ -54,6 +55,15 @@ export function createDisplayTab(app: App): HTMLElement {
 
   container.appendChild(axisGroup);
   container.appendChild(secondaryAxesRow);
+
+  const logButton = document.createElement('button');
+  logButton.type = 'button';
+  logButton.className = 'display-log-button';
+  logButton.textContent = 'Open Log Viewer';
+  logButton.addEventListener('click', () => {
+    showLogWindow();
+  });
+  container.appendChild(logButton);
 
   const opacityRow = document.createElement('div');
   opacityRow.className = 'display-axis-opacity';

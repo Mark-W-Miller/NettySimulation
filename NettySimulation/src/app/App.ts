@@ -32,6 +32,7 @@ import {
   type SimObjectDefinition,
 } from '../engine/assets/simTypes';
 import { CameraController, type CameraClickInfo } from './camera';
+import { initLogging, log } from './log/db';
 import {
   clamp,
   mat3FromMat4,
@@ -99,6 +100,17 @@ const DEXEL_SECONDARY_RATIO = 0.9;
 
 const DEG_TO_RAD = Math.PI / 180;
 const RAD_TO_DEG = 180 / Math.PI;
+
+initLogging();
+
+const AXIS_LABEL_MAP: Record<string, string> = {
+  '1,0,0': '+X',
+  '-1,0,0': '-X',
+  '0,1,0': '+Y',
+  '0,-1,0': '-Y',
+  '0,0,1': '+Z',
+  '0,0,-1': '-Z',
+};
 
 interface RotationStep {
   axis: 'x' | 'y' | 'z';
@@ -1203,6 +1215,13 @@ export class App {
     const threshold = Math.max(width, height) * 0.08;
     if (bestDistance <= threshold) {
       this.camera.lookAtAxis(bestAxis);
+      const label = AXIS_LABEL_MAP[`${bestAxis[0]},${bestAxis[1]},${bestAxis[2]}`] ?? bestAxis.join(',');
+      log('camera', `Double-click axis snap to ${label}`);
+    } else {
+      const label = bestAxis
+        ? AXIS_LABEL_MAP[`${bestAxis[0]},${bestAxis[1]},${bestAxis[2]}`] ?? bestAxis.join(',')
+        : 'unknown';
+      log('camera', `Double-click near ${label} ignored (distance ${bestDistance.toFixed(1)}px)`);
     }
   }
 

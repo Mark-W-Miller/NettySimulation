@@ -91,6 +91,7 @@ export class CameraController {
   attach(container: HTMLDivElement): () => void {
     const pointerDown = (event: PointerEvent) => {
       if (event.button === 0 && event.detail >= 2 && this.lockToOrigin) {
+        event.preventDefault();
         if (this.clickCallback) {
           this.clickCallback({ x: event.clientX, y: event.clientY, container });
         }
