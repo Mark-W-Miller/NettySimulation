@@ -31,6 +31,16 @@ interface DragSnapshot {
 }
 
 export class CameraController {
+  private static readonly AXIS_SNAP_THRESHOLD = Math.cos((8 / 180) * Math.PI);
+  private static readonly AXIS_VECTORS: ReadonlyArray<[number, number, number]> = [
+    [1, 0, 0],
+    [-1, 0, 0],
+    [0, 1, 0],
+    [0, -1, 0],
+    [0, 0, 1],
+    [0, 0, -1],
+  ];
+
   private readonly state: CameraState = {
     azimuth: Math.PI / 5,
     elevation: Math.PI / 7,
@@ -42,6 +52,7 @@ export class CameraController {
 
   private dragMode: DragMode = null;
   private activePointerId: number | null = null;
+  private lockToOrigin = false;
   private dragStart: DragSnapshot = {
     x: 0,
     y: 0,
@@ -54,6 +65,19 @@ export class CameraController {
 
   constructor(private readonly onChange: () => void = () => {}) {}
 
+  setLockToOrigin(locked: boolean): void {
+    if (this.lockToOrigin === locked) {
+      return;
+    }
+    this.lockToOrigin = locked;
+    if (locked) {
+      this.state.panX = 0;
+      this.state.panY = 0;
+      this.state.panZ = 0;
+      this.onChange();
+    }
+  }
+
   attach(container: HTMLDivElement): () => void {
     const pointerDown = (event: PointerEvent) => {
       let mode: DragMode = null;
@@ -64,6 +88,10 @@ export class CameraController {
         mode = 'orbit';
       } else if (event.button === 1 || event.button === 2) {
         mode = 'pan';
+      }
+
+      if (this.lockToOrigin && mode === 'pan') {
+        mode = null;
       }
 
       if (!mode) {
@@ -101,9 +129,12 @@ export class CameraController {
         const elevationSensitivity = 0.004;
         this.state.azimuth = this.dragStart.azimuth - dx * orbitSensitivity;
         const nextElevation = this.dragStart.elevation + dy * elevationSensitivity;
-        const clampLimit = Math.PI / 2 - 0.05;
+        const clampLimit = Math.PI / 2 - 1e-4;
         this.state.elevation = clamp(nextElevation, -clampLimit, clampLimit);
       } else if (this.dragMode === 'pan') {
+        if (this.lockToOrigin) {
+          return;
+        }
         const panSensitivity = 0.0018 * this.state.distance;
         const basis = getCameraPanBasis(this.dragStart.azimuth, this.dragStart.elevation);
 
@@ -125,6 +156,15 @@ export class CameraController {
 
     const pointerUp = (event: PointerEvent) => {
       if (event.pointerId === this.activePointerId) {
+        if (this.dragMode === 'orbit' && this.lockToOrigin) {
+          const dx = event.clientX - this.dragStart.x;
+          const dy = event.clientY - this.dragStart.y;
+          const snapped = this.trySnapToAxis(event.clientX, event.clientY, Math.max(Math.abs(dx), Math.abs(dy)));
+          if (snapped) {
+            this.onChange();
+          }
+        }
+
         container.releasePointerCapture?.(event.pointerId);
         this.activePointerId = null;
         this.dragMode = null;
@@ -137,6 +177,11 @@ export class CameraController {
       const zoomSensitivity = 0.0018;
       const nextDistance = this.state.distance + event.deltaY * zoomSensitivity;
       this.state.distance = clamp(nextDistance, 0.15, 192);
+      if (this.lockToOrigin) {
+        this.state.panX = 0;
+        this.state.panY = 0;
+        this.state.panZ = 0;
+      }
       this.onChange();
     };
 
@@ -167,20 +212,73 @@ export class CameraController {
   }
 
   getState(): CameraState {
-    return this.state;
+  	return this.state;
   }
 
   getTarget(): [number, number, number] {
+    if (this.lockToOrigin) {
+      return [0, 0, 0];
+    }
     return [this.state.panX, this.state.panY, this.state.panZ];
   }
 
   getPosition(): [number, number, number] {
+    const target: [number, number, number] = this.lockToOrigin
+      ? [0, 0, 0]
+      : [this.state.panX, this.state.panY, this.state.panZ];
     return sphericalToCartesian(
       this.state.distance,
       this.state.azimuth,
       this.state.elevation,
-      this.getTarget(),
+      target,
     );
+  }
+
+  private trySnapToAxis(pointerX: number, pointerY: number, dragMagnitude: number): boolean {
+    if (!this.lockToOrigin) {
+      return false;
+    }
+    const minDragForSnap = 6;
+    if (dragMagnitude < minDragForSnap) {
+      return false;
+    }
+    const cameraPos = sphericalToCartesian(1, this.state.azimuth, this.state.elevation, [0, 0, 0]);
+    const viewDir = normalizeTuple([-cameraPos[0], -cameraPos[1], -cameraPos[2]]);
+    let bestAxis: [number, number, number] | null = null;
+    let bestDot = CameraController.AXIS_SNAP_THRESHOLD;
+    for (const axis of CameraController.AXIS_VECTORS) {
+      const dot = viewDir[0] * axis[0] + viewDir[1] * axis[1] + viewDir[2] * axis[2];
+      if (dot >= bestDot) {
+        bestAxis = axis;
+        bestDot = dot;
+      }
+    }
+    if (!bestAxis) {
+      return false;
+    }
+    this.applyAxisSnap(bestAxis, pointerX, pointerY);
+    this.dragStart.azimuth = this.state.azimuth;
+    this.dragStart.elevation = this.state.elevation;
+    this.dragStart.x = pointerX;
+    this.dragStart.y = pointerY;
+    return true;
+  }
+
+  private applyAxisSnap(axis: [number, number, number], pointerX: number, pointerY: number): void {
+    const desiredElevationRaw = Math.asin(-axis[1]);
+    const clampLimit = Math.PI / 2 - 1e-4;
+    const desiredElevation = clamp(desiredElevationRaw, -clampLimit, clampLimit);
+    const cosElevation = Math.cos(desiredElevation);
+    let desiredAzimuth = this.state.azimuth;
+    if (Math.abs(cosElevation) >= 1e-5) {
+      desiredAzimuth = Math.atan2(-axis[0], -axis[2]);
+    }
+    this.state.azimuth = this.normalizeAngle(desiredAzimuth);
+    this.state.elevation = desiredElevation;
+  }
+
+  private normalizeAngle(angle: number): number {
+    return Math.atan2(Math.sin(angle), Math.cos(angle));
   }
 }
 

@@ -921,6 +921,8 @@ export class App {
     }
 
     this.selectedSegmentId = segmentId;
+    const lockCamera = segment.id === 'RGP_Pray';
+    this.camera.setLockToOrigin(lockCamera);
 
     if (!this.gl) {
       return;
