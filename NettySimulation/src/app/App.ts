@@ -762,13 +762,25 @@ export class App {
       gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
 
       for (const ring of twirl8Queue) {
-        const modelMatrix = this.buildTwirl8ModelMatrix(ring.axis, ring.radius, ring.rotationY + ring.lobeAngle);
+        const normalizedRotation = ((ring.rotationY / (Math.PI * 2)) % 1 + 1) % 1;
+        const pulse =
+          normalizedRotation < 0.5
+            ? normalizedRotation * 2
+            : (1 - normalizedRotation) * 2;
+
+        const radiusFactor = 0.2 + 0.8 * pulse;
+        const widthFactor = 0.3 + 0.7 * pulse;
+        const spinFlip = pulse < 0.3 ? -1 : 1;
+        const dynamicLobeAngle = ring.lobeAngle * spinFlip;
+
+        const effectiveRadius = Math.max(0.01, ring.radius * radiusFactor);
+        const modelMatrix = this.buildTwirl8ModelMatrix(ring.axis, effectiveRadius, ring.rotationY);
         const colorVec = this.getBaseColorVector(ring.color, ring.opacity);
         Assets.drawTwirl8(gl, this.twirl8Program, this.twirl8Mesh, {
           modelMatrix,
           color: colorVec,
-          width: ring.width,
-          lobeRotation: ring.lobeAngle,
+          width: Math.max(0.05, ring.width * widthFactor),
+          lobeRotation: dynamicLobeAngle,
         });
       }
 
