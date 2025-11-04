@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "outDir": "./examples/figure8/dist",
+    "rootDir": "./examples/figure8/src",
+    "module": "ES2020",
+    "target": "ES2020",
+    "moduleResolution": "Bundler",
+    "noEmitOnError": true,
+    "allowImportingTsExtensions": false
+  },
+  "include": ["examples/figure8/src/**/*.ts"]
+}

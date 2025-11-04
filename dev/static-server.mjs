@@ -8,8 +8,8 @@ const PORT = Number.parseInt(process.env.PORT || '', 10) || 8080;
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const ROOT_DIR = path.resolve(__dirname, '..');
-const DEFAULT_DOCUMENT = '/app/index.html';
-const ALLOWED_ROOTS = new Set(['app', 'docs']);
+const DEFAULT_DOCUMENT = '/index.html';
+const ALLOWED_ROOTS = new Set(['dist', 'docs', 'public', 'src', 'examples']);
 
 const MIME_TYPES = {
   '.html': 'text/html; charset=utf-8',
@@ -61,7 +61,8 @@ const server = http.createServer(async (req, res) => {
     .replace(/^([/\\])+/, '');
   const topLevelSegment = normalizedPath.split(path.sep)[0] || '';
 
-  if (topLevelSegment && !ALLOWED_ROOTS.has(topLevelSegment)) {
+  const isFileRequest = topLevelSegment.includes('.');
+  if (topLevelSegment && !isFileRequest && !ALLOWED_ROOTS.has(topLevelSegment)) {
     res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
     res.end('Not Found');
     return;
@@ -100,7 +101,7 @@ const server = http.createServer(async (req, res) => {
 });
 
 server.listen(PORT, '127.0.0.1', () => {
-  console.log(`Static server ready at http://127.0.0.1:${PORT}/app/index.html`);
+  console.log(`Static server ready at http://127.0.0.1:${PORT}/index.html`);
 });
 
 async function streamFile(filePath, stats, res, method) {
