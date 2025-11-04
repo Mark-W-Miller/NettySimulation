@@ -253,9 +253,11 @@ interface Twirl8Object {
   width: number;
   lobeAngle: number;
   lobeOrientation: 1 | -1;
+  wasCollapsed: boolean;
   rotationY: number;
   speedPerTick: number;
   direction: 1 | -1;
+  invertPulse: boolean;
 }
 
 type SimObject = SphereObject | TwirlObject | TwirlingAxisObject | RgpXYObject | DexelObject | Twirl8Object;
@@ -664,18 +666,7 @@ export class App {
 
       if (simObject.type === 'twirl8') {
         if (beats > 0) {
-          const previousRotation = simObject.rotationY;
           simObject.rotationY += beats * this.rotationPerBeat * simObject.speedPerTick * simObject.direction;
-          const cycle = Math.PI * 2;
-          const previousTurns = Math.trunc(previousRotation / cycle);
-          const currentTurns = Math.trunc(simObject.rotationY / cycle);
-          const turnDelta = currentTurns - previousTurns;
-          if (turnDelta !== 0) {
-            const flips = Math.abs(turnDelta);
-            if (flips % 2 === 1) {
-              simObject.lobeOrientation = simObject.lobeOrientation === 1 ? -1 : 1;
-            }
-          }
         }
         twirl8Queue.push(simObject);
         continue;
@@ -817,13 +808,25 @@ export class App {
 
       for (const ring of twirl8Queue) {
         const normalizedRotation = ((ring.rotationY / (Math.PI * 2)) % 1 + 1) % 1;
-        const pulse =
+        const pulseRaw =
           normalizedRotation < 0.5
             ? normalizedRotation * 2
             : (1 - normalizedRotation) * 2;
+        const pulse = ring.invertPulse ? 1 - pulseRaw : pulseRaw;
 
         const radiusFactor = pulse;
         const widthFactor = pulse;
+
+        const collapsedThreshold = 0.05;
+        if (radiusFactor <= collapsedThreshold) {
+          if (!ring.wasCollapsed) {
+            ring.lobeOrientation = ring.lobeOrientation === 1 ? -1 : 1;
+            ring.wasCollapsed = true;
+          }
+        } else if (ring.wasCollapsed) {
+          ring.wasCollapsed = false;
+        }
+
         const dynamicLobeAngle = ring.lobeAngle * ring.lobeOrientation;
 
         const effectiveRadius = Math.max(0, ring.radius * radiusFactor);
@@ -1073,9 +1076,11 @@ export class App {
           width: lobeWidth,
           lobeAngle,
           lobeOrientation: 1,
+          wasCollapsed: false,
           rotationY: (def.initialRotationDeg ?? 0) * DEG_TO_RAD,
           speedPerTick: Math.max(0.1, def.speedPerTick ?? 1),
           direction: def.direction ?? 1,
+          invertPulse: def.invertPulse ?? false,
         });
       } else if (objectDef.type === 'twirling-axis') {
         const mesh = this.ensureTwirlingAxisMesh();

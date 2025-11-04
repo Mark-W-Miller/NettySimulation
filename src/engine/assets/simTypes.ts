@@ -79,6 +79,7 @@ export interface Twirl8ObjectDefinition {
   speedPerTick?: number;
   direction?: 1 | -1;
   initialRotationDeg?: number;
+  invertPulse?: boolean;
 }
 
 export interface DexelObjectDefinition {

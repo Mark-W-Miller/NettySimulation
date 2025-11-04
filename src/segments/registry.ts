@@ -91,6 +91,7 @@ export const SEGMENT_BLUEPRINTS: SegmentBlueprint[] = [
           width: 0.3,
           lobeRotationDeg: 20,
           visible: true,
+          invertPulse: false,
         },
       },
       {
@@ -104,6 +105,7 @@ export const SEGMENT_BLUEPRINTS: SegmentBlueprint[] = [
           width: 0.3,
           lobeRotationDeg: 20,
           visible: true,
+          invertPulse: true,
         },
       },
     ],

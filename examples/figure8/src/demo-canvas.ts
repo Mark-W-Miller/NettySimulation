@@ -1,6 +1,6 @@
 // src/demo-canvas.ts
 
-import { K1P2Figure8 } from './k1p2-figure8.js';
+import { K1P2Figure8 } from './k1p2-figure8';
 
 const canvas = document.createElement('canvas');
 canvas.width = 640;
@@ -15,7 +15,7 @@ function draw() {
         ctx.fillStyle = 'rgba(28, 99, 241, 1)';
 
         const points = figure8.nextBeat();
-        ctx.strokeStyle = `100%, 100%, 50%)`;
+        ctx.strokeStyle = 'hsl(210 100% 50%)';
         ctx.lineWidth = 2;
         ctx.beginPath();
         points.forEach((point, index) => {

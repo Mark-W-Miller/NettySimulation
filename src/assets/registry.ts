@@ -213,6 +213,7 @@ interface K1P2AssetConfig extends Record<string, unknown> {
   speedPerTick: number;
   direction: 1 | -1;
   initialRotationDeg?: number;
+  invertPulse?: boolean;
 }
 
 const k1p2Defaults: K1P2AssetConfig = {
@@ -226,6 +227,7 @@ const k1p2Defaults: K1P2AssetConfig = {
   lobeRotationDeg: 20,
   speedPerTick: 1,
   direction: 1,
+  invertPulse: false,
 };
 
 const k1p2Asset: AssetDefinition<K1P2AssetConfig> = {
@@ -251,6 +253,7 @@ const k1p2Asset: AssetDefinition<K1P2AssetConfig> = {
       speedPerTick: merged.speedPerTick,
       direction: merged.direction,
       initialRotationDeg: merged.initialRotationDeg,
+      invertPulse: merged.invertPulse,
     };
     return { simObjects: [definition] };
   },
