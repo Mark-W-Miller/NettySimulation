@@ -1,20 +1,20 @@
 [
   {
     "name": "error-reporter",
-    "pid": 88214,
+    "pid": 88080,
     "command": [
       "node",
       "dev/error-reporter.mjs"
     ],
-    "startedAt": "2025-11-05T21:04:05.456Z"
+    "startedAt": "2025-11-05T21:03:01.813Z"
   },
   {
     "name": "static-server",
-    "pid": 88216,
+    "pid": 88082,
     "command": [
       "node",
       "dev/static-server.mjs"
     ],
-    "startedAt": "2025-11-05T21:04:05.459Z"
+    "startedAt": "2025-11-05T21:03:01.814Z"
   }
 ]

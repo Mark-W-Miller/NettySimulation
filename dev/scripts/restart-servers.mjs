@@ -6,7 +6,8 @@ import { fileURLToPath } from 'url';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const PROJECT_ROOT = path.resolve(__dirname, '..');
+// Move two directories up so PROJECT_ROOT resolves to the repository root.
+const PROJECT_ROOT = path.resolve(__dirname, '..', '..');
 const PID_FILE = path.join(PROJECT_ROOT, '.server-pids.json');
 
 const SERVER_CONFIG = [
