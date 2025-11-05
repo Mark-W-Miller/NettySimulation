@@ -26,6 +26,7 @@ export interface K1P2Program {
   uniformView: WebGLUniformLocation;
   uniformProjection: WebGLUniformLocation;
   uniformColor: WebGLUniformLocation;
+  uniformBackColor: WebGLUniformLocation;
   uniformSize: WebGLUniformLocation;
   uniformLobeWidth: WebGLUniformLocation;
   uniformLobeRotation: WebGLUniformLocation;
@@ -52,6 +53,7 @@ export interface K1P2SharedUniforms {
 export interface K1P2DrawParams {
   modelMatrix: Float32Array;
   color: Float32Array; // vec4 RGBA
+  backColor: Float32Array; // vec4 RGBA
   size: number;
   lobeWidth: number;
   lobeRotation: number;
@@ -305,6 +307,8 @@ export function createK1P2Program(gl: WebGLRenderingContext): K1P2Program {
     uniform float uLobeRotation;
 
     varying vec3 vNormal;
+    varying vec3 vLocalPosition;
+    varying float vLobeWidth;
 
     vec3 rotateAroundAxis(vec3 v, vec3 axis, float angle) {
       float c = cos(angle);
@@ -319,6 +323,9 @@ export function createK1P2Program(gl: WebGLRenderingContext): K1P2Program {
       pos.x *= uSize;
       pos.y *= uLobeWidth;
 
+      vLocalPosition = pos;
+      vLobeWidth = uLobeWidth;
+
       float angle = uLobeRotation * aLobeSign;
       vec3 axis = vec3(1.0, 0.0, 0.0);
       if (length(axis) > 0.0001) {
@@ -329,21 +336,38 @@ export function createK1P2Program(gl: WebGLRenderingContext): K1P2Program {
       vec4 worldPosition = uModelMatrix * vec4(pos, 1.0);
       vec3 worldNormal = normalize((uModelMatrix * vec4(normal, 0.0)).xyz);
 
-      vNormal = worldNormal;
-      gl_Position = uProjectionMatrix * uViewMatrix * worldPosition;
-    }
+    vNormal = worldNormal;
+    gl_Position = uProjectionMatrix * uViewMatrix * worldPosition;
+  }
   `;
 
   const fragmentShaderSource = `
     precision mediump float;
     uniform vec4 uColor;
+    uniform vec4 uBackColor;
     varying vec3 vNormal;
+    varying vec3 vLocalPosition;
+    varying float vLobeWidth;
     void main() {
       vec3 lightDir = normalize(vec3(0.2, 0.4, 1.0));
       float diffuse = max(dot(normalize(vNormal), lightDir), 0.0);
       float ambient = 0.25;
       float lighting = ambient + diffuse * 0.75;
-      gl_FragColor = vec4(uColor.rgb * lighting, uColor.a);
+      bool isFront = gl_FrontFacing;
+      vec3 baseColor = isFront ? uColor.rgb : uBackColor.rgb;
+      float alpha = isFront ? uColor.a : uBackColor.a;
+
+      if (isFront) {
+        float halfWidth = max(0.0001, vLobeWidth);
+        float dotRadius = halfWidth * 0.075;
+        vec2 local = vec2(vLocalPosition.x, vLocalPosition.y - (halfWidth * 0.65));
+        float dist = length(local);
+        float mask = smoothstep(dotRadius, dotRadius - (dotRadius * 0.35), dist);
+        vec3 dotColor = mix(baseColor, vec3(1.0, 0.95, 0.85), 0.75);
+        baseColor = mix(dotColor, baseColor, mask);
+      }
+
+      gl_FragColor = vec4(baseColor * lighting, alpha);
     }
   `;
 
@@ -374,6 +398,7 @@ export function createK1P2Program(gl: WebGLRenderingContext): K1P2Program {
   const uniformView = getRequiredUniform(gl, program, 'uViewMatrix');
   const uniformProjection = getRequiredUniform(gl, program, 'uProjectionMatrix');
   const uniformColor = getRequiredUniform(gl, program, 'uColor');
+  const uniformBackColor = getRequiredUniform(gl, program, 'uBackColor');
   const uniformSize = getRequiredUniform(gl, program, 'uSize');
   const uniformLobeWidth = getRequiredUniform(gl, program, 'uLobeWidth');
   const uniformLobeRotation = getRequiredUniform(gl, program, 'uLobeRotation');
@@ -387,6 +412,7 @@ export function createK1P2Program(gl: WebGLRenderingContext): K1P2Program {
     uniformView,
     uniformProjection,
     uniformColor,
+    uniformBackColor,
     uniformSize,
     uniformLobeWidth,
     uniformLobeRotation,
@@ -419,6 +445,7 @@ export function drawK1P2(
 ): void {
   gl.uniformMatrix4fv(program.uniformModel, false, params.modelMatrix);
   gl.uniform4fv(program.uniformColor, params.color);
+  gl.uniform4fv(program.uniformBackColor, params.backColor);
   const sizeScale =
     mesh.baseTipDistance > ORIGIN_EPSILON ? params.size / mesh.baseTipDistance : params.size;
   const widthScale =

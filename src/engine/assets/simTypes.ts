@@ -71,6 +71,7 @@ export interface Twirl8ObjectDefinition {
   axis: 'x' | 'y' | 'z';
   radius: number;
   color: BaseColor;
+  backColor?: BaseColor;
   opacity?: number;
   visible?: boolean;
   size?: number;

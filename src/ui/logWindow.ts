@@ -1,6 +1,25 @@
 // logWindow.ts — floating log viewer with category filters
 import { getCategories, log, LogRecord, subscribe } from '../app/log/db';
 
+interface LogWindowState {
+  open: boolean;
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+}
+
+const STORAGE_KEY = 'nettysimulation.logWindow';
+const DEFAULT_LAYOUT: LogWindowState = {
+  open: false,
+  left: 72,
+  top: 72,
+  width: 460,
+  height: 320,
+};
+
+let layoutState: LogWindowState = loadLayoutState();
+
 let windowElement: HTMLDivElement | null = null;
 let logListElement: HTMLDivElement | null = null;
 let categoryContainer: HTMLDivElement | null = null;
@@ -8,6 +27,16 @@ let unsubscribe: (() => void) | null = null;
 let selectedCategories = new Set<string>();
 let cachedRecords: ReadonlyArray<LogRecord> = [];
 let stylesInjected = false;
+
+export function restoreLogWindow(): void {
+  ensureStyles();
+  if (!windowElement && layoutState.open) {
+    createLogWindow();
+  }
+  if (layoutState.open) {
+    showLogWindow();
+  }
+}
 
 export function showLogWindow(): void {
   ensureStyles();
@@ -20,9 +49,13 @@ export function showLogWindow(): void {
     return;
   }
 
+  applyLayout(windowElement);
   windowElement.style.display = 'flex';
   windowElement.focus();
-  log('ui', 'Log window opened');
+  if (!layoutState.open) {
+    updateLayoutState({ open: true });
+    log('ui', 'Log window opened');
+  }
 }
 
 function ensureStyles(): void {
@@ -144,7 +177,8 @@ function ensureStyles(): void {
 function createLogWindow(): void {
   windowElement = document.createElement('div');
   windowElement.className = 'log-window';
-  windowElement.style.display = 'flex';
+  applyLayout(windowElement);
+  windowElement.style.display = layoutState.open ? 'flex' : 'none';
 
   const header = document.createElement('div');
   header.className = 'log-window__header';
@@ -157,8 +191,12 @@ function createLogWindow(): void {
   closeButton.textContent = '×';
   closeButton.addEventListener('click', () => {
     if (windowElement) {
+      persistBounds();
       windowElement.style.display = 'none';
-      log('ui', 'Log window closed');
+      if (layoutState.open) {
+        updateLayoutState({ open: false });
+        log('ui', 'Log window closed');
+      }
     }
   });
   header.appendChild(title);
@@ -177,6 +215,8 @@ function createLogWindow(): void {
   windowElement.appendChild(logListElement);
 
   document.body.appendChild(windowElement);
+  windowElement.addEventListener('pointerup', persistBounds);
+  windowElement.addEventListener('pointercancel', persistBounds);
 
   selectedCategories = new Set(getCategories());
   unsubscribe = subscribe((entries) => {
@@ -216,8 +256,11 @@ function enableDrag(handle: HTMLElement, target: HTMLElement): void {
     }
     const newLeft = event.clientX - offsetX;
     const newTop = event.clientY - offsetY;
-    target.style.left = `${Math.max(0, newLeft)}px`;
-    target.style.top = `${Math.max(0, newTop)}px`;
+    const clampedLeft = Math.max(0, newLeft);
+    const clampedTop = Math.max(0, newTop);
+    target.style.left = `${clampedLeft}px`;
+    target.style.top = `${clampedTop}px`;
+    updateLayoutState({ left: clampedLeft, top: clampedTop });
   });
 
   const endDrag = (event: PointerEvent) => {
@@ -230,6 +273,8 @@ function enableDrag(handle: HTMLElement, target: HTMLElement): void {
 
   handle.addEventListener('pointerup', endDrag);
   handle.addEventListener('pointercancel', endDrag);
+  handle.addEventListener('pointerup', persistBounds);
+  handle.addEventListener('pointercancel', persistBounds);
 }
 
 function refreshCategoryControls(): void {
@@ -294,4 +339,58 @@ function renderLogEntries(): void {
     row.appendChild(messageCell);
     logListElement.appendChild(row);
   }
+}
+
+function loadLayoutState(): LogWindowState {
+  if (typeof window === 'undefined') {
+    return { ...DEFAULT_LAYOUT };
+  }
+  try {
+    const stored = window.localStorage.getItem(STORAGE_KEY);
+    if (!stored) {
+      return { ...DEFAULT_LAYOUT };
+    }
+    const parsed = JSON.parse(stored) as Partial<LogWindowState>;
+    return {
+      open: Boolean(parsed.open),
+      left: Number.isFinite(parsed.left) ? Number(parsed.left) : DEFAULT_LAYOUT.left,
+      top: Number.isFinite(parsed.top) ? Number(parsed.top) : DEFAULT_LAYOUT.top,
+      width: Number.isFinite(parsed.width) ? Math.max(320, Number(parsed.width)) : DEFAULT_LAYOUT.width,
+      height: Number.isFinite(parsed.height) ? Math.max(220, Number(parsed.height)) : DEFAULT_LAYOUT.height,
+    };
+  } catch (error) {
+    console.warn('logWindow: failed to parse layout state', error);
+    return { ...DEFAULT_LAYOUT };
+  }
+}
+
+function updateLayoutState(partial: Partial<LogWindowState>): void {
+  layoutState = { ...layoutState, ...partial };
+  if (typeof window === 'undefined') {
+    return;
+  }
+  try {
+    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(layoutState));
+  } catch (error) {
+    console.warn('logWindow: failed to persist layout state', error);
+  }
+}
+
+function applyLayout(target: HTMLElement): void {
+  target.style.left = `${layoutState.left}px`;
+  target.style.top = `${layoutState.top}px`;
+  target.style.width = `${layoutState.width}px`;
+  target.style.height = `${layoutState.height}px`;
+}
+
+function persistBounds(): void {
+  if (!windowElement) {
+    return;
+  }
+  updateLayoutState({
+    left: Math.max(0, windowElement.offsetLeft),
+    top: Math.max(0, windowElement.offsetTop),
+    width: Math.max(320, windowElement.offsetWidth),
+    height: Math.max(220, windowElement.offsetHeight),
+  });
 }

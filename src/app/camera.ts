@@ -8,13 +8,9 @@ import {
   scaleVec3,
   sphericalToCartesian,
 } from './math3d';
+import { dispatchDoubleClick } from './doubleClickRegistry';
 
 type DragMode = 'orbit' | 'pan' | null;
-export interface CameraClickInfo {
-  x: number;
-  y: number;
-  container: HTMLDivElement;
-}
 
 export interface CameraState {
   azimuth: number;
@@ -58,7 +54,6 @@ export class CameraController {
   private dragMode: DragMode = null;
   private activePointerId: number | null = null;
   private lockToOrigin = false;
-  private clickCallback: ((info: CameraClickInfo) => void) | null = null;
   private dragStart: DragSnapshot = {
     x: 0,
     y: 0,
@@ -70,10 +65,6 @@ export class CameraController {
   };
 
   constructor(private readonly onChange: () => void = () => {}) {}
-
-  setClickCallback(callback: ((info: CameraClickInfo) => void) | null): void {
-    this.clickCallback = callback;
-  }
 
   setLockToOrigin(locked: boolean): void {
     if (this.lockToOrigin === locked) {
@@ -92,8 +83,9 @@ export class CameraController {
     const pointerDown = (event: PointerEvent) => {
       if (event.button === 0 && event.detail >= 2 && this.lockToOrigin) {
         event.preventDefault();
-        if (this.clickCallback) {
-          this.clickCallback({ x: event.clientX, y: event.clientY, container });
+        const bounds = container.getBoundingClientRect();
+        if (!dispatchDoubleClick({ clientX: event.clientX, clientY: event.clientY, bounds })) {
+          console.debug?.('doubleClick', 'No handler', event.clientX, event.clientY);
         }
         return;
       }

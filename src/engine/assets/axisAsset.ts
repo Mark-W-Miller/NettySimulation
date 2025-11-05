@@ -1,5 +1,7 @@
 // axisAsset.ts — constructs cylinder meshes for each principal axis
 
+import { registerDoubleClickTarget, type DoubleClickEventContext, type DoubleClickTarget } from '../../app/doubleClickRegistry';
+
 /**
  * GPU buffers required to render one axis (positive + negative halves).
  */
@@ -116,6 +118,15 @@ export const DEFAULT_AXIS_LENGTH = DEFAULT_AXIS_OPTIONS.length;
 export const DEFAULT_AXIS_RADIUS = DEFAULT_AXIS_OPTIONS.radius;
 export const DEFAULT_AXIS_NEGATIVE_ALPHA_SCALE = DEFAULT_AXIS_OPTIONS.negativeAlphaScale;
 export const DEFAULT_AXIS_NEGATIVE_COLOR_SCALE = DEFAULT_AXIS_OPTIONS.negativeColorScale;
+
+const AXIS_DIRECTIONS: Array<{ axis: [number, number, number]; label: string; key: 'x' | 'y' | 'z' }> = [
+  { axis: [1, 0, 0], label: '+X', key: 'x' },
+  { axis: [-1, 0, 0], label: '-X', key: 'x' },
+  { axis: [0, 1, 0], label: '+Y', key: 'y' },
+  { axis: [0, -1, 0], label: '-Y', key: 'y' },
+  { axis: [0, 0, 1], label: '+Z', key: 'z' },
+  { axis: [0, 0, -1], label: '-Z', key: 'z' },
+];
 
 /**
  * Allocates buffers for the X, Y, and Z axes using the provided parameters.
@@ -505,6 +516,101 @@ function disposeAxisHalfMesh(gl: WebGLRenderingContext, mesh: AxisHalfMesh | nul
   if (mesh.lineIndexBuffer) {
     gl.deleteBuffer(mesh.lineIndexBuffer);
   }
+}
+
+interface AxisDoubleClickParams {
+  getViewMatrix(): Float32Array;
+  getProjectionMatrix(): Float32Array;
+  getAxisVisibility(): Readonly<Record<'x' | 'y' | 'z', boolean>>;
+  onAxisSnap(info: { axis: [number, number, number]; label: string }): void;
+}
+
+export function registerAxisDoubleClickTarget(params: AxisDoubleClickParams): () => void {
+  let lastHit: { axis: [number, number, number]; label: string } | null = null;
+
+  const target: DoubleClickTarget = {
+    priority: 10,
+    hitTest: (context: DoubleClickEventContext) => {
+      const view = params.getViewMatrix();
+      const projection = params.getProjectionMatrix();
+      const visibility = params.getAxisVisibility();
+      let bestAxis: { axis: [number, number, number]; label: string } | null = null;
+      let bestDistance = Number.POSITIVE_INFINITY;
+  const axisLength = DEFAULT_AXIS_LENGTH * 0.5;
+
+      for (const entry of AXIS_DIRECTIONS) {
+        if (!visibility[entry.key]) {
+          continue;
+        }
+        const worldPoint: [number, number, number] = [
+          entry.axis[0] * axisLength,
+          entry.axis[1] * axisLength,
+          entry.axis[2] * axisLength,
+        ];
+      const projected = projectPoint(worldPoint, view, projection, context.bounds);
+      if (!projected.visible) {
+        continue;
+      }
+      const dx = projected.x - (context.clientX - context.bounds.left);
+      const dy = projected.y - (context.clientY - context.bounds.top);
+      const distance = Math.hypot(dx, dy);
+        if (distance < bestDistance) {
+          bestDistance = distance;
+          bestAxis = { axis: entry.axis, label: entry.label };
+        }
+      }
+
+      const threshold = Math.max(context.bounds.width, context.bounds.height) * 0.08;
+      if (bestAxis && bestDistance <= threshold) {
+        lastHit = bestAxis;
+        return true;
+      }
+
+      lastHit = null;
+      return false;
+    },
+    onDoubleClick: () => {
+      if (lastHit) {
+        params.onAxisSnap(lastHit);
+      }
+    },
+  };
+
+  return registerDoubleClickTarget(target);
+}
+
+function projectPoint(
+  point: [number, number, number],
+  view: Float32Array,
+  projection: Float32Array,
+  bounds: DOMRect,
+): { x: number; y: number; visible: boolean } {
+  const viewVec = multiplyMat4Vec(view, [point[0], point[1], point[2], 1]);
+  const clipVec = multiplyMat4Vec(projection, viewVec);
+  const w = clipVec[3];
+  if (Math.abs(w) < 1e-6) {
+    return { x: 0, y: 0, visible: false };
+  }
+  const ndcX = clipVec[0] / w;
+  const ndcY = clipVec[1] / w;
+  const ndcZ = clipVec[2] / w;
+  const visible = ndcZ >= -1 && ndcZ <= 1;
+  const screenX = (ndcX * 0.5 + 0.5) * bounds.width;
+  const screenY = (1 - (ndcY * 0.5 + 0.5)) * bounds.height;
+  return { x: screenX, y: screenY, visible };
+}
+
+function multiplyMat4Vec(
+  matrix: Float32Array,
+  vector: [number, number, number, number],
+): [number, number, number, number] {
+  const [x, y, z, w] = vector;
+  return [
+    matrix[0] * x + matrix[4] * y + matrix[8] * z + matrix[12] * w,
+    matrix[1] * x + matrix[5] * y + matrix[9] * z + matrix[13] * w,
+    matrix[2] * x + matrix[6] * y + matrix[10] * z + matrix[14] * w,
+    matrix[3] * x + matrix[7] * y + matrix[11] * z + matrix[15] * w,
+  ];
 }
 
 /**

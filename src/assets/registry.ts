@@ -205,6 +205,7 @@ interface K1P2AssetConfig extends Record<string, unknown> {
   axis: 'x' | 'y' | 'z';
   radius: number;
   color: BaseColor;
+  backColor?: BaseColor;
   opacity: number;
   visible: boolean;
   size: number;
@@ -220,6 +221,7 @@ const k1p2Defaults: K1P2AssetConfig = {
   axis: 'y',
   radius: 24,
   color: 'white',
+  backColor: 'white',
   opacity: 0.85,
   visible: true,
   size: 0.3,
@@ -245,6 +247,7 @@ const k1p2Asset: AssetDefinition<K1P2AssetConfig> = {
       axis: merged.axis,
       radius: merged.radius,
       color: merged.color,
+      backColor: merged.backColor ?? merged.color,
       opacity: merged.opacity,
       visible: merged.visible,
       size,

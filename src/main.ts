@@ -3,6 +3,7 @@ import './styles/app.css';
 import { App } from './app/App';
 import { TabPanel } from './ui/TabPanel';
 import { createDisplayTab } from './ui/display';
+import { restoreLogWindow } from './ui/logWindow';
 import { createSimTab } from './ui/sim';
 import { createPropertiesTab } from './ui/properties';
 
@@ -47,5 +48,6 @@ rootElement.innerHTML = '';
 rootElement.appendChild(shell);
 
 app.mount(sceneHost);
+restoreLogWindow();
 
 console.log('NettySimulation ready');

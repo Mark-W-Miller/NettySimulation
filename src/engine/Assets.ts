@@ -112,4 +112,5 @@ export type {
   K1P2Program as Twirl8Program,
   K1P2SharedUniforms as Twirl8SharedUniforms,
   K1P2OutlineProgram as Twirl8OutlineProgram,
+  K1P2DrawParams as Twirl8DrawParams,
 } from './assets/K1P2Asset';
