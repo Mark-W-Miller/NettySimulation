@@ -77,6 +77,7 @@ const RGP_PRIMARY_CONFIG = {
   initialPulsePhase: 0.5,
   initialPulseScale: 0.25,
   invertPulse: true,
+  visible: true,
 };
 
 const RGP_SECONDARY_CONFIG = {
@@ -93,6 +94,7 @@ const RGP_SECONDARY_CONFIG = {
   initialPulsePhase: 0.5,
   initialPulseScale: 1,
   invertPulse: false,
+  visible: true,
 };
 
 const DEXEL_PRIMARY_RATIO = 1;
@@ -171,6 +173,7 @@ interface RgpRingConfig {
   initialPulsePhase: number;
   initialPulseScale: number;
   invertPulse: boolean;
+  visible: boolean;
 }
 
 interface RgpRingState {
@@ -187,6 +190,7 @@ interface RgpRingState {
   pulsePhase: number;
   pulseScale: number;
   invertPulse: boolean;
+  visible: boolean;
 }
 
 interface RgpXYObject {
@@ -201,6 +205,7 @@ interface RgpXYObject {
   secondary: RgpRingState;
   sphereColor: Float32Array;
   sphereOpacity: number;
+  sphereVisible: boolean;
 }
 
 interface DexelObject {
@@ -993,6 +998,8 @@ export class App {
         const mesh = this.ensureTwirlMesh();
         const primary = this.createRgpRingState(RGP_PRIMARY_CONFIG);
         const secondary = this.createRgpRingState(RGP_SECONDARY_CONFIG);
+        primary.visible = objectDef.primaryVisible ?? true;
+        secondary.visible = objectDef.secondaryVisible ?? true;
         this.simObjects.push({
           type: 'rgpXY',
           id: objectDef.id,
@@ -1005,6 +1012,7 @@ export class App {
           secondary,
           sphereColor: new Float32Array(RGP_SPHERE_COLOR),
           sphereOpacity: RGP_SPHERE_OPACITY,
+          sphereVisible: objectDef.sphereVisible ?? true,
         });
       } else if (objectDef.type === 'dexel') {
         const mesh = this.ensureTwirlMesh();
@@ -1443,7 +1451,7 @@ export class App {
   updateRgpRingProperties(
     objectId: string,
     ring: 'primary' | 'secondary',
-    updates: Partial<{ opacity: number; shadingIntensity: number }>,
+    updates: Partial<{ opacity: number; shadingIntensity: number; visible: boolean }>,
   ): void {
     const target = this.simObjects.find((object) => object.id === objectId);
     if (!target || target.type !== 'rgpXY') {
@@ -1469,10 +1477,29 @@ export class App {
       }
     }
 
+    if (typeof updates.visible === 'boolean') {
+      if (ringState.visible !== updates.visible) {
+        ringState.visible = updates.visible;
+        changed = true;
+      }
+    }
+
     if (changed) {
       this.updateDexelAnchorsForRgp(target);
       this.notifySimChange();
     }
+  }
+
+  setRgpSphereVisible(objectId: string, visible: boolean): void {
+    const target = this.simObjects.find((object) => object.id === objectId);
+    if (!target || target.type !== 'rgpXY') {
+      return;
+    }
+    if (target.sphereVisible === visible) {
+      return;
+    }
+    target.sphereVisible = visible;
+    this.notifySimChange();
   }
 
   private notifySimChange(): void {
@@ -1718,6 +1745,10 @@ export class App {
   }
 
   private drawRgpSphere(gl: WebGLRenderingContext, sphereProgram: SphereProgram, rgp: RgpXYObject): void {
+    if (!rgp.sphereVisible) {
+      return;
+    }
+
     const mesh = this.ensureSphereMesh();
     const primaryRadius = this.getRgpRingRadius(rgp.size, rgp.primary);
     const secondaryRadius = this.getRgpRingRadius(rgp.size, rgp.secondary);
@@ -1765,6 +1796,7 @@ export class App {
       pulsePhase: config.initialPulsePhase,
       pulseScale: config.initialPulseScale,
       invertPulse: config.invertPulse,
+      visible: config.visible,
     };
   }
 
@@ -1783,6 +1815,7 @@ export class App {
       pulsePhase: source.pulsePhase,
       pulseScale: source.pulseScale,
       invertPulse: source.invertPulse,
+      visible: source.visible,
     };
   }
 
@@ -1802,6 +1835,10 @@ export class App {
     patternRepeats: number,
     position?: Float32Array,
   ): void {
+    if (!ring.visible) {
+      return;
+    }
+
     const shellSize = Math.max(1, size * ring.shellScale);
     const { modelMatrix, normalMatrix } = this.buildTwirlMatrices(
       ring.plane,

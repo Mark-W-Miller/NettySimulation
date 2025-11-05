@@ -63,6 +63,9 @@ export interface RgpXYObjectDefinition {
   id: string;
   size: number;
   visible?: boolean;
+  primaryVisible?: boolean;
+  secondaryVisible?: boolean;
+  sphereVisible?: boolean;
 }
 
 export interface Twirl8ObjectDefinition {

@@ -74,6 +74,9 @@ export function createPropertiesTab(app: App): HTMLElement {
     twirl8SizeInput?: HTMLInputElement;
     twirl8WidthInput?: HTMLInputElement;
     twirl8AngleInput?: HTMLInputElement;
+    primaryVisibilityCheckbox?: HTMLInputElement;
+    secondaryVisibilityCheckbox?: HTMLInputElement;
+    sphereVisibilityCheckbox?: HTMLInputElement;
   };
 
   const objectControls = new Map<string, ObjectControls>();
@@ -278,27 +281,33 @@ export function createPropertiesTab(app: App): HTMLElement {
     let scriptSelect: HTMLSelectElement | undefined;
     let sphereOpacitySlider: HTMLInputElement | undefined;
     let sphereOpacityValue: HTMLSpanElement | undefined;
+    let sphereVisibilityCheckbox: HTMLInputElement | undefined;
     let primaryShadingSlider: HTMLInputElement | undefined;
     let primaryShadingValue: HTMLSpanElement | undefined;
     let primaryOpacitySlider: HTMLInputElement | undefined;
     let primaryOpacityValue: HTMLSpanElement | undefined;
+    let primaryVisibilityCheckbox: HTMLInputElement | undefined;
     let secondaryShadingSlider: HTMLInputElement | undefined;
     let secondaryShadingValue: HTMLSpanElement | undefined;
     let secondaryOpacitySlider: HTMLInputElement | undefined;
     let secondaryOpacityValue: HTMLSpanElement | undefined;
+    let secondaryVisibilityCheckbox: HTMLInputElement | undefined;
     let twirl8SizeInput: HTMLInputElement | undefined;
     let twirl8WidthInput: HTMLInputElement | undefined;
     let twirl8AngleInput: HTMLInputElement | undefined;
 
-    const makeSubDetails = (label: string) => {
-      const detailsEl = document.createElement('details');
-      detailsEl.className = 'properties-subobject';
-      const summaryEl = document.createElement('summary');
-      summaryEl.className = 'properties-subobject-summary';
-      summaryEl.textContent = label;
-      detailsEl.appendChild(summaryEl);
-      return detailsEl;
-    };
+  const makeSubDetails = (label: string) => {
+    const detailsEl = document.createElement('details');
+    detailsEl.className = 'properties-subobject';
+    const summaryEl = document.createElement('summary');
+    summaryEl.className = 'properties-subobject-summary';
+    const titleSpan = document.createElement('span');
+    titleSpan.className = 'properties-subobject-summary-title';
+    titleSpan.textContent = label;
+    summaryEl.appendChild(titleSpan);
+    detailsEl.appendChild(summaryEl);
+    return { details: detailsEl, summary: summaryEl };
+  };
 
     if (isTwirlingAxis || isRgp || isDexel) {
       const defaultScript = app.getDefaultTwirlingAxisScript();
@@ -337,8 +346,10 @@ export function createPropertiesTab(app: App): HTMLElement {
       form.appendChild(sizeGroup);
 
       if (isRgp) {
-        const rgpSim = simObject as SimObjectView & { sphereOpacity?: number };
-        const primaryDetails = makeSubDetails('Primary Ring');
+        const rgpSim = simObject as SimObjectView & { sphereOpacity?: number; sphereVisible?: boolean };
+        const primarySection = makeSubDetails('Primary Ring');
+        const primaryDetails = primarySection.details;
+        const primarySummary = primarySection.summary;
         const primaryBody = document.createElement('div');
         primaryBody.className = 'properties-subobject-body';
         const primaryContent = document.createElement('div');
@@ -347,6 +358,27 @@ export function createPropertiesTab(app: App): HTMLElement {
         primaryBody.appendChild(primaryContent);
 
         const primaryState = simObject.primary;
+        const primaryVisibilityToggle = document.createElement('label');
+        primaryVisibilityToggle.className = 'properties-subobject-toggle';
+        primaryVisibilityToggle.addEventListener('click', (event) => {
+          event.stopPropagation();
+        });
+        primaryVisibilityCheckbox = document.createElement('input');
+        primaryVisibilityCheckbox.type = 'checkbox';
+        primaryVisibilityCheckbox.checked = primaryState.visible;
+        primaryVisibilityCheckbox.addEventListener('click', (event) => {
+          event.stopPropagation();
+        });
+        primaryVisibilityCheckbox.addEventListener('change', () => {
+          app.selectSimObject(simObject.id);
+          app.updateRgpRingProperties(simObject.id, 'primary', { visible: primaryVisibilityCheckbox!.checked });
+        });
+        const primaryVisibilityText = document.createElement('span');
+        primaryVisibilityText.textContent = 'Visible';
+        primaryVisibilityToggle.appendChild(primaryVisibilityCheckbox);
+        primaryVisibilityToggle.appendChild(primaryVisibilityText);
+        primarySummary.appendChild(primaryVisibilityToggle);
+
         const primaryShadingGroup = document.createElement('div');
         primaryShadingGroup.className = 'properties-group';
         const primaryShadingLabel = document.createElement('label');
@@ -416,7 +448,9 @@ export function createPropertiesTab(app: App): HTMLElement {
         primaryDetails.appendChild(primaryBody);
         form.appendChild(primaryDetails);
 
-        const secondaryDetails = makeSubDetails('Secondary Ring');
+        const secondarySection = makeSubDetails('Secondary Ring');
+        const secondaryDetails = secondarySection.details;
+        const secondarySummary = secondarySection.summary;
         const secondaryBody = document.createElement('div');
         secondaryBody.className = 'properties-subobject-body';
         const secondaryContent = document.createElement('div');
@@ -425,6 +459,27 @@ export function createPropertiesTab(app: App): HTMLElement {
         secondaryBody.appendChild(secondaryContent);
 
         const secondaryState = simObject.secondary;
+        const secondaryVisibilityToggle = document.createElement('label');
+        secondaryVisibilityToggle.className = 'properties-subobject-toggle';
+        secondaryVisibilityToggle.addEventListener('click', (event) => {
+          event.stopPropagation();
+        });
+        secondaryVisibilityCheckbox = document.createElement('input');
+        secondaryVisibilityCheckbox.type = 'checkbox';
+        secondaryVisibilityCheckbox.checked = secondaryState.visible;
+        secondaryVisibilityCheckbox.addEventListener('click', (event) => {
+          event.stopPropagation();
+        });
+        secondaryVisibilityCheckbox.addEventListener('change', () => {
+          app.selectSimObject(simObject.id);
+          app.updateRgpRingProperties(simObject.id, 'secondary', { visible: secondaryVisibilityCheckbox!.checked });
+        });
+        const secondaryVisibilityText = document.createElement('span');
+        secondaryVisibilityText.textContent = 'Visible';
+        secondaryVisibilityToggle.appendChild(secondaryVisibilityCheckbox);
+        secondaryVisibilityToggle.appendChild(secondaryVisibilityText);
+        secondarySummary.appendChild(secondaryVisibilityToggle);
+
         const secondaryShadingGroup = document.createElement('div');
         secondaryShadingGroup.className = 'properties-group';
         const secondaryShadingLabel = document.createElement('label');
@@ -494,7 +549,38 @@ export function createPropertiesTab(app: App): HTMLElement {
         secondaryDetails.appendChild(secondaryBody);
         form.appendChild(secondaryDetails);
 
-        const sphereDetails = makeSubDetails('Blue Sphere');
+        const sphereSection = makeSubDetails('Blue Sphere');
+        const sphereDetails = sphereSection.details;
+        const sphereSummary = sphereSection.summary;
+        const sphereBody = document.createElement('div');
+        sphereBody.className = 'properties-subobject-body';
+
+        const sphereDescription = document.createElement('div');
+        sphereDescription.className = 'properties-subobject-description';
+        sphereDescription.textContent = 'Soft core sphere that blends both rings.';
+        sphereBody.appendChild(sphereDescription);
+
+        const sphereVisibilityToggle = document.createElement('label');
+        sphereVisibilityToggle.className = 'properties-subobject-toggle';
+        sphereVisibilityToggle.addEventListener('click', (event) => {
+          event.stopPropagation();
+        });
+        sphereVisibilityCheckbox = document.createElement('input');
+        sphereVisibilityCheckbox.type = 'checkbox';
+        sphereVisibilityCheckbox.checked = rgpSim.sphereVisible ?? true;
+        sphereVisibilityCheckbox.addEventListener('click', (event) => {
+          event.stopPropagation();
+        });
+        sphereVisibilityCheckbox.addEventListener('change', () => {
+          app.selectSimObject(simObject.id);
+          app.setRgpSphereVisible(simObject.id, sphereVisibilityCheckbox!.checked);
+        });
+        const sphereVisibilityText = document.createElement('span');
+        sphereVisibilityText.textContent = 'Visible';
+        sphereVisibilityToggle.appendChild(sphereVisibilityCheckbox);
+        sphereVisibilityToggle.appendChild(sphereVisibilityText);
+        sphereSummary.appendChild(sphereVisibilityToggle);
+
         const sphereOpacityGroup = document.createElement('div');
         sphereOpacityGroup.className = 'properties-group';
         const sphereOpacityLabel = document.createElement('label');
@@ -524,11 +610,10 @@ export function createPropertiesTab(app: App): HTMLElement {
           applyUpdate({ sphereOpacity: clamped } as ObjectUpdate);
         });
         sphereOpacityGroup.appendChild(sphereOpacityLabel);
-      sphereOpacityGroup.appendChild(sphereOpacitySlider);
-      sphereOpacityGroup.appendChild(sphereOpacityValue);
-      const sphereBody = document.createElement('div');
-      sphereBody.className = 'properties-subobject-body';
-      sphereBody.appendChild(sphereOpacityGroup);
+        sphereOpacityGroup.appendChild(sphereOpacitySlider);
+        sphereOpacityGroup.appendChild(sphereOpacityValue);
+        sphereBody.appendChild(sphereOpacityGroup);
+
         sphereDetails.appendChild(sphereBody);
         form.appendChild(sphereDetails);
       }
@@ -983,14 +1068,17 @@ export function createPropertiesTab(app: App): HTMLElement {
       scriptSelect,
       sphereOpacitySlider,
       sphereOpacityValue,
+      sphereVisibilityCheckbox,
       primaryShadingSlider,
       primaryShadingValue,
       primaryOpacitySlider,
       primaryOpacityValue,
+      primaryVisibilityCheckbox,
       secondaryShadingSlider,
       secondaryShadingValue,
       secondaryOpacitySlider,
       secondaryOpacityValue,
+      secondaryVisibilityCheckbox,
       twirl8SizeInput,
       twirl8WidthInput,
       twirl8AngleInput,
@@ -1012,6 +1100,36 @@ export function createPropertiesTab(app: App): HTMLElement {
     controls.summaryLabel.textContent = simObject.id;
 
     controls.visibilityCheckbox.checked = simObject.visible;
+
+    if (controls.primaryVisibilityCheckbox) {
+      if (simObject.type === 'rgpXY') {
+        controls.primaryVisibilityCheckbox.checked = simObject.primary.visible;
+        controls.primaryVisibilityCheckbox.disabled = false;
+      } else {
+        controls.primaryVisibilityCheckbox.checked = true;
+        controls.primaryVisibilityCheckbox.disabled = true;
+      }
+    }
+
+    if (controls.secondaryVisibilityCheckbox) {
+      if (simObject.type === 'rgpXY') {
+        controls.secondaryVisibilityCheckbox.checked = simObject.secondary.visible;
+        controls.secondaryVisibilityCheckbox.disabled = false;
+      } else {
+        controls.secondaryVisibilityCheckbox.checked = true;
+        controls.secondaryVisibilityCheckbox.disabled = true;
+      }
+    }
+
+    if (controls.sphereVisibilityCheckbox) {
+      if (simObject.type === 'rgpXY') {
+        controls.sphereVisibilityCheckbox.checked = simObject.sphereVisible;
+        controls.sphereVisibilityCheckbox.disabled = false;
+      } else {
+        controls.sphereVisibilityCheckbox.checked = true;
+        controls.sphereVisibilityCheckbox.disabled = true;
+      }
+    }
 
     if (controls.speedInput && typeof (simObject as { speedPerTick?: number }).speedPerTick === 'number') {
       const speed = (simObject as { speedPerTick: number }).speedPerTick;
@@ -1125,7 +1243,7 @@ export function createPropertiesTab(app: App): HTMLElement {
         controls.sphereOpacitySlider.value = simObject.sphereOpacity.toFixed(2);
         controls.sphereOpacitySlider.dataset.prev = controls.sphereOpacitySlider.value;
         controls.sphereOpacityValue.textContent = simObject.sphereOpacity.toFixed(2);
-        controls.sphereOpacitySlider.disabled = false;
+        controls.sphereOpacitySlider.disabled = !simObject.sphereVisible;
       } else {
         const defaultSphereOpacity = app.getDefaultRgpSphereOpacity();
         controls.sphereOpacitySlider.value = defaultSphereOpacity.toFixed(2);
@@ -1139,7 +1257,7 @@ export function createPropertiesTab(app: App): HTMLElement {
       if (simObject.type === 'rgpXY') {
         controls.primaryShadingSlider.value = simObject.primary.shadingIntensity.toFixed(2);
         controls.primaryShadingValue.textContent = simObject.primary.shadingIntensity.toFixed(2);
-        controls.primaryShadingSlider.disabled = false;
+        controls.primaryShadingSlider.disabled = !simObject.primary.visible;
       } else {
         controls.primaryShadingSlider.value = '0.00';
         controls.primaryShadingValue.textContent = '0.00';
@@ -1151,7 +1269,7 @@ export function createPropertiesTab(app: App): HTMLElement {
       if (simObject.type === 'rgpXY') {
         controls.primaryOpacitySlider.value = simObject.primary.opacity.toFixed(2);
         controls.primaryOpacityValue.textContent = simObject.primary.opacity.toFixed(2);
-        controls.primaryOpacitySlider.disabled = false;
+        controls.primaryOpacitySlider.disabled = !simObject.primary.visible;
       } else {
         controls.primaryOpacitySlider.value = '0.00';
         controls.primaryOpacityValue.textContent = '0.00';
@@ -1163,7 +1281,7 @@ export function createPropertiesTab(app: App): HTMLElement {
       if (simObject.type === 'rgpXY') {
         controls.secondaryShadingSlider.value = simObject.secondary.shadingIntensity.toFixed(2);
         controls.secondaryShadingValue.textContent = simObject.secondary.shadingIntensity.toFixed(2);
-        controls.secondaryShadingSlider.disabled = false;
+        controls.secondaryShadingSlider.disabled = !simObject.secondary.visible;
       } else {
         controls.secondaryShadingSlider.value = '0.00';
         controls.secondaryShadingValue.textContent = '0.00';
@@ -1175,7 +1293,7 @@ export function createPropertiesTab(app: App): HTMLElement {
       if (simObject.type === 'rgpXY') {
         controls.secondaryOpacitySlider.value = simObject.secondary.opacity.toFixed(2);
         controls.secondaryOpacityValue.textContent = simObject.secondary.opacity.toFixed(2);
-        controls.secondaryOpacitySlider.disabled = false;
+        controls.secondaryOpacitySlider.disabled = !simObject.secondary.visible;
       } else {
         controls.secondaryOpacitySlider.value = '0.00';
         controls.secondaryOpacityValue.textContent = '0.00';

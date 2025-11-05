@@ -88,11 +88,17 @@ const sphereAsset: AssetDefinition<SphereAssetConfig> = {
 interface RgpXYAssetConfig extends Record<string, unknown> {
   size: number;
   visible: boolean;
+  primaryVisible: boolean;
+  secondaryVisible: boolean;
+  sphereVisible: boolean;
 }
 
 const rgpDefaults: RgpXYAssetConfig = {
   size: 24,
   visible: true,
+  primaryVisible: true,
+  secondaryVisible: true,
+  sphereVisible: true,
 };
 
 const rgpXYAsset: AssetDefinition<RgpXYAssetConfig> = {
@@ -107,6 +113,9 @@ const rgpXYAsset: AssetDefinition<RgpXYAssetConfig> = {
       id: instanceId,
       size: merged.size,
       visible: merged.visible,
+      primaryVisible: merged.primaryVisible,
+      secondaryVisible: merged.secondaryVisible,
+      sphereVisible: merged.sphereVisible,
     };
     return { simObjects: [definition] };
   },

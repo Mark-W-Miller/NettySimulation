@@ -377,6 +377,16 @@ body {
   font-weight: 600;
   letter-spacing: 0.04em;
   cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.properties-subobject-summary-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
 }
 
 .properties-subobject[open] > .properties-subobject-summary {
@@ -393,4 +403,21 @@ body {
 .properties-subobject-description {
   font-size: 0.8rem;
   color: rgba(214, 225, 255, 0.75);
+}
+
+.properties-subobject-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  font-size: 0.78rem;
+  letter-spacing: 0.03em;
+  color: rgba(227, 237, 255, 0.9);
+}
+
+.properties-subobject-toggle input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: #5d8dff;
+  cursor: pointer;
 }

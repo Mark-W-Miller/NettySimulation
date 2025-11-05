@@ -243,6 +243,11 @@ function enableDrag(handle: HTMLElement, target: HTMLElement): void {
     if (event.button !== 0) {
       return;
     }
+    const target = event.target as HTMLElement | null;
+    if (target && target.closest('.log-window__close')) {
+      // Allow the close button to receive the click without enabling drag.
+      return;
+    }
     dragging = true;
     pointerId = event.pointerId;
     offsetX = event.clientX - target.offsetLeft;
