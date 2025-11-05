@@ -1,58 +1,14 @@
-// sim.ts — builds the Simulation tab UI for starting/stopping and tuning speed
+// sim.ts — builds the Simulation tab UI for segment browsing and selection
 import { App } from '../app/App';
 
 export function createSimTab(app: App, openPropertiesTab: () => void): HTMLElement {
   const container = document.createElement('div');
   container.className = 'sim-tab';
 
-  const controls = document.createElement('div');
-  controls.className = 'sim-controls';
-
-  const startButton = document.createElement('button');
-  startButton.type = 'button';
-  startButton.textContent = 'Start';
-  startButton.className = 'sim-button';
-
-  const stopButton = document.createElement('button');
-  stopButton.type = 'button';
-  stopButton.textContent = 'Stop';
-  stopButton.className = 'sim-button';
-
-  const resetButton = document.createElement('button');
-  resetButton.type = 'button';
-  resetButton.textContent = 'Reset';
-  resetButton.className = 'sim-button';
-
-  controls.appendChild(startButton);
-  controls.appendChild(stopButton);
-  controls.appendChild(resetButton);
-
-  const speedGroup = document.createElement('div');
-  speedGroup.className = 'sim-speed-group';
-
-  const speedLabel = document.createElement('label');
-  speedLabel.className = 'sim-speed-label';
-  speedLabel.textContent = 'Speed';
-  speedLabel.htmlFor = 'sim-speed-slider';
-
-  const slider = document.createElement('input');
-  slider.type = 'range';
-  slider.min = '1';
-  slider.max = '60';
-  slider.step = '1';
-  slider.id = 'sim-speed-slider';
-  slider.className = 'sim-speed-slider';
-  slider.value = String(app.getSimulationSpeed());
-
-  const speedValue = document.createElement('span');
-  speedValue.className = 'sim-speed-value';
-
-  speedGroup.appendChild(speedLabel);
-  speedGroup.appendChild(slider);
-  speedGroup.appendChild(speedValue);
-
-  container.appendChild(controls);
-  container.appendChild(speedGroup);
+  const segmentIntro = document.createElement('p');
+  segmentIntro.className = 'sim-objects-intro';
+  segmentIntro.textContent = 'Choose a simulation segment to load it into the scene.';
+  container.appendChild(segmentIntro);
 
   const segmentLabel = document.createElement('div');
   segmentLabel.className = 'sim-objects-label';
@@ -63,17 +19,6 @@ export function createSimTab(app: App, openPropertiesTab: () => void): HTMLEleme
 
   container.appendChild(segmentLabel);
   container.appendChild(segmentList);
-
-  const updateUI = () => {
-    const running = app.isSimulationRunning();
-    startButton.disabled = running;
-    stopButton.disabled = !running;
-    const speed = app.getSimulationSpeed();
-    speedValue.textContent = `${speed} beats/sec`;
-    if (String(speed) !== slider.value) {
-      slider.value = String(speed);
-    }
-  };
 
   const refreshSegmentList = () => {
     segmentList.innerHTML = '';
@@ -118,33 +63,10 @@ export function createSimTab(app: App, openPropertiesTab: () => void): HTMLEleme
     }
   };
   window.addEventListener('popstate', handlePopState);
-  startButton.addEventListener('click', () => {
-    app.startSimulation();
-    updateUI();
-  });
-
-  stopButton.addEventListener('click', () => {
-    app.stopSimulation();
-    updateUI();
-  });
-
-  resetButton.addEventListener('click', () => {
-    app.resetSimulation();
-    updateUI();
-  });
-
-  slider.addEventListener('input', () => {
-    const speed = Number.parseInt(slider.value, 10);
-    app.setSimulationSpeed(speed);
-    updateUI();
-  });
-
   const unsubscribe = app.onSimChange(() => {
-    updateUI();
     refreshSegmentList();
   });
 
-  updateUI();
   refreshSegmentList();
 
   container.addEventListener('DOMNodeRemoved', () => {

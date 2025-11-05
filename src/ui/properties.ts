@@ -24,6 +24,52 @@ export function createPropertiesTab(app: App): HTMLElement {
   const container = document.createElement('div');
   container.className = 'properties-tab';
 
+  const controlsBar = document.createElement('div');
+  controlsBar.className = 'properties-controls';
+
+  const startButton = document.createElement('button');
+  startButton.type = 'button';
+  startButton.textContent = 'Start';
+  startButton.className = 'sim-button';
+
+  const stopButton = document.createElement('button');
+  stopButton.type = 'button';
+  stopButton.textContent = 'Stop';
+  stopButton.className = 'sim-button';
+
+  const resetButton = document.createElement('button');
+  resetButton.type = 'button';
+  resetButton.textContent = 'Reset';
+  resetButton.className = 'sim-button';
+
+  const speedGroup = document.createElement('div');
+  speedGroup.className = 'sim-speed-group properties-speed-group';
+
+  const speedLabel = document.createElement('label');
+  speedLabel.className = 'sim-speed-label';
+  speedLabel.textContent = 'Speed';
+  speedLabel.htmlFor = 'properties-sim-speed-slider';
+
+  const speedSlider = document.createElement('input');
+  speedSlider.type = 'range';
+  speedSlider.min = '1';
+  speedSlider.max = '60';
+  speedSlider.step = '1';
+  speedSlider.id = 'properties-sim-speed-slider';
+  speedSlider.className = 'sim-speed-slider';
+
+  const speedValue = document.createElement('span');
+  speedValue.className = 'sim-speed-value properties-speed-value';
+
+  speedGroup.appendChild(speedLabel);
+  speedGroup.appendChild(speedSlider);
+  speedGroup.appendChild(speedValue);
+
+  controlsBar.appendChild(startButton);
+  controlsBar.appendChild(stopButton);
+  controlsBar.appendChild(resetButton);
+  controlsBar.appendChild(speedGroup);
+
   const header = document.createElement('div');
   header.className = 'properties-header';
   header.textContent = 'Simulation Objects';
@@ -35,6 +81,7 @@ export function createPropertiesTab(app: App): HTMLElement {
   const list = document.createElement('div');
   list.className = 'properties-object-list';
 
+  container.appendChild(controlsBar);
   container.appendChild(header);
   container.appendChild(description);
   container.appendChild(list);
@@ -81,6 +128,42 @@ export function createPropertiesTab(app: App): HTMLElement {
 
   const objectControls = new Map<string, ObjectControls>();
   const openObjects = new Set<string>();
+
+  const updateSimControls = () => {
+    const running = app.isSimulationRunning();
+    startButton.disabled = running;
+    stopButton.disabled = !running;
+    const speed = app.getSimulationSpeed();
+    if (speedSlider.value !== String(speed)) {
+      speedSlider.value = String(speed);
+    }
+    speedValue.textContent = `${speed} beats/sec`;
+  };
+
+  startButton.addEventListener('click', () => {
+    app.startSimulation();
+    updateSimControls();
+  });
+
+  stopButton.addEventListener('click', () => {
+    app.stopSimulation();
+    updateSimControls();
+  });
+
+  resetButton.addEventListener('click', () => {
+    app.resetSimulation();
+    updateSimControls();
+  });
+
+  speedSlider.addEventListener('input', () => {
+    const speed = Number.parseInt(speedSlider.value, 10);
+    if (Number.isFinite(speed)) {
+      app.setSimulationSpeed(speed);
+      updateSimControls();
+    }
+  });
+
+  updateSimControls();
 
   const createObjectControls = (simObject: SimObjectView): ObjectControls => {
     const details = document.createElement('details');
@@ -1380,6 +1463,7 @@ export function createPropertiesTab(app: App): HTMLElement {
   };
 
   const unsubscribe = app.onSimChange(() => {
+    updateSimControls();
     renderObjects();
   });
 
