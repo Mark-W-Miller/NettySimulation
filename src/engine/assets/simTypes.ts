@@ -75,6 +75,7 @@ export interface Twirl8ObjectDefinition {
   radius: number;
   color: BaseColor;
   backColor?: BaseColor;
+  shadingIntensity?: number;
   opacity?: number;
   visible?: boolean;
   size?: number;

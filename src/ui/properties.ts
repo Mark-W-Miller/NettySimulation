@@ -347,7 +347,7 @@ export function createPropertiesTab(app: App): HTMLElement {
 
       if (isRgp) {
         const rgpSim = simObject as SimObjectView & { sphereOpacity?: number; sphereVisible?: boolean };
-        const primarySection = makeSubDetails('Primary Ring');
+        const primarySection = makeSubDetails('K1 Ring');
         const primaryDetails = primarySection.details;
         const primarySummary = primarySection.summary;
         const primaryBody = document.createElement('div');
@@ -448,7 +448,7 @@ export function createPropertiesTab(app: App): HTMLElement {
         primaryDetails.appendChild(primaryBody);
         form.appendChild(primaryDetails);
 
-        const secondarySection = makeSubDetails('Secondary Ring');
+        const secondarySection = makeSubDetails('P2 Ring');
         const secondaryDetails = secondarySection.details;
         const secondarySummary = secondarySection.summary;
         const secondaryBody = document.createElement('div');

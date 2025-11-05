@@ -215,6 +215,7 @@ interface K1P2AssetConfig extends Record<string, unknown> {
   radius: number;
   color: BaseColor;
   backColor?: BaseColor;
+  shadingIntensity?: number;
   opacity: number;
   visible: boolean;
   size: number;
@@ -231,6 +232,7 @@ const k1p2Defaults: K1P2AssetConfig = {
   radius: 24,
   color: 'white',
   backColor: 'white',
+  shadingIntensity: 0.5,
   opacity: 0.85,
   visible: true,
   size: 0.3,
@@ -257,6 +259,7 @@ const k1p2Asset: AssetDefinition<K1P2AssetConfig> = {
       radius: merged.radius,
       color: merged.color,
       backColor: merged.backColor ?? merged.color,
+      shadingIntensity: merged.shadingIntensity,
       opacity: merged.opacity,
       visible: merged.visible,
       size,
