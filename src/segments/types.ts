@@ -7,10 +7,19 @@ export interface SegmentAssetInstance {
   children?: SegmentAssetInstance[];
 }
 
+export interface GhostObjectDefinition {
+  id: string;
+  position: [number, number, number];
+  color: [number, number, number];
+  radius: number;
+  opacity: number;
+}
+
 export interface SegmentBlueprint {
   id: string;
   name: string;
   assets: SegmentAssetInstance[];
+  ghosts?: GhostObjectDefinition[];
 }
 
 export interface SegmentRuntimeAsset {
@@ -23,4 +32,5 @@ export interface SimulationSegmentDefinition {
   name: string;
   objects: SimObjectDefinition[];
   assets: SegmentRuntimeAsset[];
+  ghosts: GhostObjectDefinition[];
 }

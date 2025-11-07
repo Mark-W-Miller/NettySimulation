@@ -24,6 +24,8 @@ export interface SphereObjectDefinition {
   shadingIntensity?: number;
   opacity?: number;
   initialRotationY?: number;
+  groupId?: string;
+  groupRole?: 'ring' | 'twirl8';
 }
 
 export interface TwirlObjectDefinition {
@@ -42,6 +44,9 @@ export interface TwirlObjectDefinition {
   initialRotationY?: number;
   initialPulsePhase?: number;
   initialPulseScale?: number;
+  invertPulse?: boolean;
+  groupId?: string;
+  groupRole?: 'ring' | 'twirl8';
 }
 
 export interface TwirlingAxisObjectDefinition {
@@ -56,6 +61,9 @@ export interface TwirlingAxisObjectDefinition {
   initialRotationZ?: number;
   opacity?: number;
   rotationScript?: string;
+  emitGhost?: boolean;
+  groupId?: string;
+  groupRole?: 'ring' | 'twirl8';
 }
 
 export interface RgpXYObjectDefinition {
@@ -66,6 +74,8 @@ export interface RgpXYObjectDefinition {
   primaryVisible?: boolean;
   secondaryVisible?: boolean;
   sphereVisible?: boolean;
+  groupId?: string;
+  groupRole?: 'ring' | 'twirl8';
 }
 
 export interface Twirl8ObjectDefinition {
@@ -85,6 +95,8 @@ export interface Twirl8ObjectDefinition {
   direction?: 1 | -1;
   initialRotationDeg?: number;
   invertPulse?: boolean;
+  groupId?: string;
+  groupRole?: 'ring' | 'twirl8';
 }
 
 export interface DexelObjectDefinition {
@@ -99,6 +111,8 @@ export interface DexelObjectDefinition {
   anchorId?: string;
   primarySpeedRatio?: number;
   secondarySpeedRatio?: number;
+  groupId?: string;
+  groupRole?: 'ring' | 'twirl8';
 }
 
 export type SimObjectDefinition =

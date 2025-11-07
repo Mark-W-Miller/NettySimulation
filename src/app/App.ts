@@ -64,7 +64,7 @@ const RGP_SPHERE_COLOR = new Float32Array([0.42, 0.68, 0.93]);
 const RGP_SPHERE_OPACITY = 0.12;
 
 const RGP_PRIMARY_CONFIG = {
-  shellScale: 20 / 24,
+  shellScale: 1,
   speedPerTick: 1,
   direction: 1 as 1 | -1,
   plane: 'GB' as const,
@@ -74,15 +74,15 @@ const RGP_PRIMARY_CONFIG = {
   beltHalfAngle: 0.18,
   pulseSpeed: 0.75,
   initialRotationY: Math.PI / 6,
-  initialPulsePhase: 0.5,
-  initialPulseScale: 0.25,
-  invertPulse: true,
+  initialPulsePhase: 0,
+  initialPulseScale: 0,
+  invertPulse: false,
   visible: true,
 };
 
 const RGP_SECONDARY_CONFIG = {
-  shellScale: 28 / 24,
-  speedPerTick: 0.9,
+  shellScale: 1,
+  speedPerTick: 1,
   direction: 1 as 1 | -1,
   plane: 'YG' as const,
   baseColor: 'red' as BaseColor,
@@ -92,7 +92,7 @@ const RGP_SECONDARY_CONFIG = {
   pulseSpeed: 0.75,
   initialRotationY: Math.PI / 6,
   initialPulsePhase: 0.5,
-  initialPulseScale: 1,
+  initialPulseScale: 0,
   invertPulse: false,
   visible: true,
 };
@@ -191,6 +191,7 @@ interface RgpRingState {
   pulseScale: number;
   invertPulse: boolean;
   visible: boolean;
+  contracted: boolean;
 }
 
 interface RgpXYObject {
@@ -206,6 +207,8 @@ interface RgpXYObject {
   sphereColor: Float32Array;
   sphereOpacity: number;
   sphereVisible: boolean;
+  primaryTwirl: Twirl8Object | null;
+  secondaryTwirl: Twirl8Object | null;
 }
 
 interface DexelObject {
@@ -255,6 +258,8 @@ interface Twirl8Object {
   speedPerTick: number;
   direction: 1 | -1;
   invertPulse: boolean;
+  linkedRingState: RgpRingState | null;
+  linkedRingType: 'primary' | 'secondary' | null;
 }
 
 type SimObject = SphereObject | TwirlObject | TwirlingAxisObject | RgpXYObject | DexelObject | Twirl8Object;
@@ -580,6 +585,7 @@ export class App {
     this.dexels = [];
     this.dexelLastSign = { x: 1, y: 1, z: 1 };
     this.simObjects.length = 0;
+    const rgpById = new Map<string, RgpXYObject>();
     this.simRunning = false;
     this.selectedObjectId = null;
     this.selectedSegmentId = null;
@@ -699,6 +705,14 @@ export class App {
           this.updateRgpPulse(simObject.primary, deltaSeconds);
           this.updateRgpPulse(simObject.secondary, deltaSeconds);
         }
+        if (simObject.primaryTwirl) {
+          simObject.primaryTwirl.linkedRingState = simObject.primary;
+          simObject.primaryTwirl.linkedRingType = 'primary';
+        }
+        if (simObject.secondaryTwirl) {
+          simObject.secondaryTwirl.linkedRingState = simObject.secondary;
+          simObject.secondaryTwirl.linkedRingType = 'secondary';
+        }
 
         rgpQueue.push(simObject);
         continue;
@@ -712,7 +726,7 @@ export class App {
         simObject.pulsePhase = (simObject.pulsePhase + deltaSeconds * simObject.pulseSpeed * 0.25) % 1;
         const triangle = simObject.pulsePhase < 0.5 ? simObject.pulsePhase * 2 : (1 - (simObject.pulsePhase - 0.5) * 2);
         const baseTriangle = simObject.id === 'white-ring' ? 1 - triangle : triangle;
-        simObject.pulseScale = 0.25 + 0.75 * baseTriangle;
+        simObject.pulseScale = 0.25 + 0.75 * clamp(baseTriangle, 0, 1);
       }
       if (simObject.type === 'twirl') {
         twirlQueue.push(simObject);
@@ -822,15 +836,19 @@ export class App {
       }> = [];
 
       for (const ring of twirl8Queue) {
+        const linkedPulse = ring.linkedRingState ? clamp(ring.linkedRingState.pulseScale, 0, 1) : null;
         const normalizedRotation = ((ring.rotationY / (Math.PI * 2)) % 1 + 1) % 1;
-        const pulseRaw =
+        const rotationPulse =
           normalizedRotation < 0.5
             ? normalizedRotation * 2
             : (1 - normalizedRotation) * 2;
-        const pulse = ring.invertPulse ? 1 - pulseRaw : pulseRaw;
+        let basePulse = linkedPulse ?? rotationPulse;
+        if (ring.invertPulse) {
+          basePulse = 1 - basePulse;
+        }
 
-        const radiusFactor = pulse;
-        const widthFactor = pulse;
+        const radiusFactor = basePulse;
+        const widthFactor = basePulse;
 
         const collapsedThreshold = 0.05;
         if (radiusFactor <= collapsedThreshold) {
@@ -965,6 +983,7 @@ export class App {
     this.ghostParticles = [];
 
     this.simObjects.length = 0;
+    const rgpById = new Map<string, RgpXYObject>();
     for (const objectDef of segment.objects) {
       if (objectDef.type === 'twirl') {
         const mesh = this.ensureTwirlMesh();
@@ -1000,7 +1019,7 @@ export class App {
         const secondary = this.createRgpRingState(RGP_SECONDARY_CONFIG);
         primary.visible = objectDef.primaryVisible ?? true;
         secondary.visible = objectDef.secondaryVisible ?? true;
-        this.simObjects.push({
+        const rgpObject: RgpXYObject = {
           type: 'rgpXY',
           id: objectDef.id,
           mesh,
@@ -1013,7 +1032,11 @@ export class App {
           sphereColor: new Float32Array(RGP_SPHERE_COLOR),
           sphereOpacity: RGP_SPHERE_OPACITY,
           sphereVisible: objectDef.sphereVisible ?? true,
-        });
+          primaryTwirl: null,
+          secondaryTwirl: null,
+        };
+        this.simObjects.push(rgpObject);
+        rgpById.set(rgpObject.id, rgpObject);
       } else if (objectDef.type === 'dexel') {
         const mesh = this.ensureTwirlMesh();
         const baseSpeed = objectDef.speedPerTick ?? 1;
@@ -1084,7 +1107,7 @@ export class App {
           lobeWidth = Math.max(0.01, size);
         }
         const lobeAngle = (def.lobeRotationDeg ?? 20) * DEG_TO_RAD;
-        this.simObjects.push({
+        const twirl8Object: Twirl8Object = {
           type: 'twirl8',
           id: def.id,
           axis: def.axis,
@@ -1102,7 +1125,30 @@ export class App {
           speedPerTick: Math.max(0.1, def.speedPerTick ?? 1),
           direction: def.direction ?? 1,
           invertPulse: def.invertPulse ?? false,
-        });
+          linkedRingState: null,
+          linkedRingType: null,
+        };
+        this.simObjects.push(twirl8Object);
+
+        let targetRgp: RgpXYObject | null = null;
+        if (rgpById.size === 1) {
+          const iterator = rgpById.values().next();
+          targetRgp = iterator.value ?? null;
+        } else {
+          targetRgp = rgpById.get('rgp-xy') ?? rgpById.values().next().value ?? null;
+        }
+        if (targetRgp) {
+          const idLower = twirl8Object.id.toLowerCase();
+          if (idLower.includes('k1')) {
+            targetRgp.primaryTwirl = twirl8Object;
+            twirl8Object.linkedRingState = targetRgp.primary;
+            twirl8Object.linkedRingType = 'primary';
+          } else if (idLower.includes('p2')) {
+            targetRgp.secondaryTwirl = twirl8Object;
+            twirl8Object.linkedRingState = targetRgp.secondary;
+            twirl8Object.linkedRingType = 'secondary';
+          }
+        }
       } else if (objectDef.type === 'twirling-axis') {
         const mesh = this.ensureTwirlingAxisMesh();
         const scriptSource = objectDef.rotationScript ?? DEFAULT_TWIRLING_AXIS_SCRIPT;
@@ -1797,6 +1843,7 @@ export class App {
       pulseScale: config.initialPulseScale,
       invertPulse: config.invertPulse,
       visible: config.visible,
+      contracted: config.initialPulseScale <= 0.02,
     };
   }
 
@@ -1816,14 +1863,28 @@ export class App {
       pulseScale: source.pulseScale,
       invertPulse: source.invertPulse,
       visible: source.visible,
+      contracted: source.contracted,
     };
   }
 
   private updateRgpPulse(ring: RgpRingState, deltaSeconds: number): void {
+    if (ring.pulseSpeed <= 0) {
+      return;
+    }
+
     ring.pulsePhase = (ring.pulsePhase + deltaSeconds * ring.pulseSpeed * 0.25) % 1;
-    const triangle = ring.pulsePhase < 0.5 ? ring.pulsePhase * 2 : (1 - (ring.pulsePhase - 0.5) * 2);
+    const triangle = ring.pulsePhase < 0.5 ? ring.pulsePhase * 2 : 1 - (ring.pulsePhase - 0.5) * 2;
     const baseTriangle = ring.invertPulse ? 1 - triangle : triangle;
-    ring.pulseScale = 0.25 + 0.75 * baseTriangle;
+    const nextScale = Math.min(Math.max(baseTriangle, 0), 1);
+    ring.pulseScale = nextScale;
+
+    const isContracted = ring.pulseScale <= 0.02;
+    if (isContracted && !ring.contracted) {
+      ring.direction = ring.direction === 1 ? -1 : 1;
+      ring.contracted = true;
+    } else if (!isContracted && ring.contracted) {
+      ring.contracted = false;
+    }
   }
 
   private drawRgpRing(
@@ -1874,8 +1935,8 @@ export class App {
 
   private getRgpRingRadius(size: number, ring: RgpRingState, pulseScaleOverride?: number): number {
     const shellSize = Math.max(1, size * ring.shellScale);
-    const pulseScale = Math.max(pulseScaleOverride ?? ring.pulseScale, 0.01);
-    return Math.max(0.05, (shellSize / this.defaultShellSize) * pulseScale);
+    const pulseScale = Math.max(pulseScaleOverride ?? ring.pulseScale, 0);
+    return Math.max(0, (shellSize / this.defaultShellSize) * pulseScale);
   }
 
   private buildTwirlMatrices(
@@ -1908,9 +1969,9 @@ export class App {
     }
 
     const rotationAndAlignment = mat4Multiply(rotationMatrix, alignmentMatrix);
-    const radiusScale = Math.max(0.05, (shellSize / this.defaultShellSize) * pulseScale);
+    const radiusScale = Math.max(0, (shellSize / this.defaultShellSize) * pulseScale);
     const heightScale = Math.max(0.01, Math.sin(beltHalfAngle));
-    const scaleMatrix = mat4Scale(Math.max(radiusScale, 0.01), Math.max(heightScale, 0.005), Math.max(radiusScale, 0.01));
+    const scaleMatrix = mat4Scale(radiusScale, heightScale, radiusScale);
     const modelMatrix = mat4Multiply(rotationAndAlignment, scaleMatrix);
 
     return {

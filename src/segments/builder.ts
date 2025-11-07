@@ -31,6 +31,7 @@ function buildSegment(segment: SegmentBlueprint): SimulationSegmentDefinition {
     name: segment.name,
     objects,
     assets: runtimeAssets,
+    ghosts: segment.ghosts ?? [],
   };
 }
 

@@ -4,6 +4,7 @@ import type {
   DexelObjectDefinition,
   RgpXYObjectDefinition,
   SphereObjectDefinition,
+  TwirlObjectDefinition,
   Twirl8ObjectDefinition,
   TwirlingAxisObjectDefinition,
   SimObjectDefinition,
@@ -131,6 +132,7 @@ interface TwirlingAxisAssetConfig extends Record<string, unknown> {
   initialRotationZ?: number;
   opacity: number;
   rotationScript?: string;
+  emitGhost?: boolean;
 }
 
 const twirlingAxisDefaults: TwirlingAxisAssetConfig = {
@@ -139,6 +141,7 @@ const twirlingAxisDefaults: TwirlingAxisAssetConfig = {
   visible: false,
   size: 1,
   opacity: 1,
+  emitGhost: true,
 };
 
 const twirlingAxisAsset: AssetDefinition<TwirlingAxisAssetConfig> = {
@@ -160,6 +163,7 @@ const twirlingAxisAsset: AssetDefinition<TwirlingAxisAssetConfig> = {
       initialRotationZ: merged.initialRotationZ,
       opacity: merged.opacity,
       rotationScript: merged.rotationScript,
+      emitGhost: merged.emitGhost,
     };
     return { simObjects: [definition] };
   },
@@ -274,12 +278,110 @@ const k1p2Asset: AssetDefinition<K1P2AssetConfig> = {
   },
 };
 
+interface RingTwirlAssetConfig extends Record<string, unknown> {
+  ringPlane: 'YG' | 'GB' | 'YB';
+  ringShellSize: number;
+  ringColor: BaseColor;
+  ringShadingIntensity: number;
+  ringOpacity: number;
+  ringBeltHalfAngle: number;
+  pulseSpeed: number;
+  twirlAxis: 'x' | 'y' | 'z';
+  twirlRadius: number;
+  twirlColor: BaseColor;
+  twirlBackColor?: BaseColor;
+  twirlOpacity: number;
+  twirlSize: number;
+  twirlWidth: number;
+  twirlLobeRotationDeg: number;
+  speedPerTick: number;
+  direction: 1 | -1;
+  visible: boolean;
+  invertPulse: boolean;
+  twirlInvertPulse: boolean;
+}
+
+const ringTwirlDefaults: RingTwirlAssetConfig = {
+  ringPlane: 'GB',
+  ringShellSize: 24,
+  ringColor: 'white',
+  ringShadingIntensity: 0.4,
+  ringOpacity: 1,
+  ringBeltHalfAngle: 0.2,
+  pulseSpeed: 0.75,
+  twirlAxis: 'y',
+  twirlRadius: 24,
+  twirlColor: 'white',
+  twirlOpacity: 0.85,
+  twirlSize: 0.3,
+  twirlWidth: 0.3,
+  twirlLobeRotationDeg: 20,
+  speedPerTick: 1,
+  direction: 1,
+  visible: true,
+  invertPulse: false,
+  twirlInvertPulse: false,
+};
+
+const ringTwirlAsset: AssetDefinition<RingTwirlAssetConfig> = {
+  id: 'ring-twirl',
+  label: 'Ring & Twirl Pair',
+  description: 'Generates a breathing ring and matching figure-eight with shared timing.',
+  defaultConfig: ringTwirlDefaults,
+  build: ({ instanceId, config }) => {
+    const merged = mergeConfig(ringTwirlDefaults, config);
+    const sharedRadius = Math.max(0.1, merged.ringShellSize);
+    const sharedSpeed = Math.max(0.1, merged.speedPerTick);
+    const sharedDirection = merged.direction >= 0 ? 1 : -1;
+    const twirlRadius = Math.max(0.1, merged.twirlRadius ?? sharedRadius);
+    const ringId = `${instanceId}-ring`;
+    const twirlId = `${instanceId}-twirl8`;
+    const ringDefinition: TwirlObjectDefinition = {
+      type: 'twirl',
+      id: ringId,
+      speedPerTick: sharedSpeed,
+      direction: sharedDirection,
+      plane: merged.ringPlane,
+      shellSize: sharedRadius,
+      baseColor: merged.ringColor,
+      visible: merged.visible,
+      shadingIntensity: merged.ringShadingIntensity,
+      opacity: merged.ringOpacity,
+      beltHalfAngle: merged.ringBeltHalfAngle,
+      pulseSpeed: merged.pulseSpeed,
+      invertPulse: merged.invertPulse,
+      groupId: instanceId,
+      groupRole: 'ring',
+    };
+    const twirlDefinition: Twirl8ObjectDefinition = {
+      type: 'twirl8',
+      id: twirlId,
+      axis: merged.twirlAxis,
+      radius: twirlRadius,
+      color: merged.twirlColor,
+      backColor: merged.twirlBackColor ?? merged.twirlColor,
+      opacity: merged.twirlOpacity,
+      visible: merged.visible,
+      size: merged.twirlSize,
+      width: merged.twirlWidth,
+      lobeRotationDeg: merged.twirlLobeRotationDeg,
+      speedPerTick: sharedSpeed,
+      direction: sharedDirection,
+      invertPulse: merged.twirlInvertPulse,
+      groupId: instanceId,
+      groupRole: 'twirl8',
+    };
+    return { simObjects: [ringDefinition, twirlDefinition] };
+  },
+};
+
 const assetList: AssetDefinition[] = [
   sphereAsset,
   rgpXYAsset,
   twirlingAxisAsset,
   dexelAsset,
   k1p2Asset,
+  ringTwirlAsset,
 ];
 
 const assetRegistry = new Map(assetList.map((asset) => [asset.id, asset] as const));
